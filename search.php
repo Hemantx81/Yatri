@@ -2,6 +2,12 @@
 session_start();
 include("includes/config.php"); // Database connection
 
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php"); // Redirect to login page if not logged in
+    exit();
+}
+
 // Initialize variables
 $buses = [];
 $recommended_buses = [];
