@@ -1,0 +1,58 @@
+/* Navbar Styling */
+.navbar {
+  background-color: #0066cc;
+}
+
+.navbar-brand {
+  font-size: 2rem;
+  font-weight: bold;
+  color: white !important;
+}
+
+.navbar-nav .nav-link {
+  color: white !important;
+  font-size: 1.1rem;
+  transition: color 0.3s ease;
+}
+
+.navbar-nav .nav-link:hover {
+  color: #ccccff !important;
+}
+
+.navbar-toggler-icon {
+  background-color: white;
+}
+
+/* Button Styling */
+.btn-login,
+.btn-signup,
+.btn-logout {
+  margin-left: 10px;
+  background-color: white;
+  color: #0066cc;
+  border: 1px solid #0066cc;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.btn-login:hover,
+.btn-signup:hover,
+.btn-logout:hover {
+  background-color: #004d99;
+  color: white;
+}
+
+.navbar-collapse {
+  justify-content: flex-end;
+}
+
+/* Ensure the nav items align correctly */
+.nav-item {
+  padding-left: 10px;
+}
+
+/* Responsive Design */
+@media (max-width: 767px) {
+  .navbar-nav {
+    text-align: center;
+  }
+}

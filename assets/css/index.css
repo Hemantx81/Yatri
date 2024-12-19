@@ -1,0 +1,40 @@
+/* General Styles */
+body {
+  font-family: "Roboto", sans-serif;
+  background-color: #f8f9fa;
+  margin: 0;
+  padding: 0;
+}
+
+/* Hero Section */
+.hero-section {
+  background: url("assests/img/Janki_Mandir.jpeg") no-repeat center center /
+    cover;
+  height: 400px;
+}
+
+.hero-section h1 {
+  font-size: 3rem;
+  font-weight: 700;
+}
+
+.hero-section p {
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.hero-section .btn {
+  padding: 10px 20px;
+  font-size: 1.2rem;
+  border-radius: 5px;
+}
+
+/* Footer */
+footer {
+  background-color: #343a40;
+  color: #f8f9fa;
+}
+
+footer p {
+  margin: 0;
+}
