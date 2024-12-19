@@ -100,6 +100,7 @@ $totalPages = ceil($totalRoutes / $perPage);
 </head>
 
 <body>
+    <?php include("../includes/sidebar.php"); ?>
     <div class="container">
         <h2 class="text-center mb-4">Manage Routes</h2>
 

@@ -56,6 +56,7 @@ $bookingsResult = $conn->query($bookingsQuery);
 </head>
 
 <body>
+    <?php include("../includes/sidebar.php"); ?>
     <div class="container mt-5">
         <h1>Manage Bookings</h1>
         <form method="GET" class="d-flex mb-3">

@@ -71,6 +71,7 @@ $total_pages = ceil($total_buses / $limit);
 </head>
 
 <body>
+    <?php include("../includes/sidebar.php"); ?>
     <div class="container mt-4">
         <a href="add_bus.php" class="btn btn-success mb-3">➕ Add New Bus</a>
         <h2>🚍 Manage Buses</h2>

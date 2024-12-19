@@ -3,11 +3,7 @@
 session_start();
 include("../includes/config.php");
 
-// Check if the user is logged in and is an admin
-// if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
-//     header("Location: login.php"); // Redirect to login if not logged in or not an admin
-//     exit();
-// }
+
 
 // Pagination setup
 $limit = 10; // Number of users per page
@@ -126,6 +122,7 @@ if (isset($_GET['delete_id'])) {
 </head>
 
 <body>
+    <?php include("../includes/sidebar.php"); ?>
     <div class="container my-5">
         <!-- Success or Error message display -->
         <?php if (isset($_SESSION['message'])): ?>

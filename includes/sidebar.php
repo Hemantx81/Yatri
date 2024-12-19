@@ -143,7 +143,7 @@
                 <li>
                     <hr class="dropdown-divider">
                 </li>
-                <li><a class="dropdown-item" href="logout.php"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
+                <li><a class="dropdown-item" href="../admin/admin_logout.php"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
             </ul>
         </div>
     </div>

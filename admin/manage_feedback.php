@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
 </head>
 
 <body>
-    <?php include 'header.php'; ?>
+    <?php include("../includes/sidebar.php"); ?>
     <div class="container mt-5">
         <h2 class="mb-4">Manage Feedback</h2>
 

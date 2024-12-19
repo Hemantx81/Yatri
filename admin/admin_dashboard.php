@@ -147,7 +147,7 @@ $completed_bookings = $conn->query("SELECT COUNT(*) AS total FROM bookings")->fe
                 </a>
             </div>
             <div class="col-md-4 mb-3">
-                <a href="view_feedback.php" class="card text-white bg-danger">
+                <a href="manage_feedback.php" class="card text-white bg-danger">
                     <div class="card-body text-center">
                         <i class="fas fa-comment-dots"></i>
                         <h5>Feedback</h5>

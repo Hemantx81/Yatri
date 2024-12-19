@@ -105,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 
 <body>
+    <?php include("../includes/sidebar.php"); ?>
     <div class="container my-4">
         <h1>Pending Payments</h1>
         <hr>
