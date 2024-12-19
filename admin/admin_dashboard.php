@@ -120,7 +120,7 @@ $completed_bookings = $conn->query("SELECT COUNT(*) AS total FROM bookings")->fe
         <h1 class="mb-4">Admin Dashboard</h1>
         <div class="row">
             <div class="col-md-4 mb-3">
-                <a href="manage_buses.php" class="card text-white bg-primary">
+                <a href="view_buses.php" class="card text-white bg-primary">
                     <div class="card-body text-center">
                         <i class="fas fa-bus"></i>
                         <h5>Total Buses</h5>

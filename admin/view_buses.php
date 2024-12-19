@@ -1,7 +1,7 @@
 <?php
 session_start();
 include('../includes/config.php'); // Include database connection
-include '../includes/header.php'; // Header file
+
 
 // Pagination and Search Logic
 $search = isset($_GET['search']) ? $_GET['search'] : '';
