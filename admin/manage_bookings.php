@@ -30,7 +30,7 @@ $totalBookingsQuery = "SELECT COUNT(*) AS total
 $totalBookingsResult = $conn->query($totalBookingsQuery);
 $totalBookings = $totalBookingsResult->fetch_assoc()['total'];
 
-// Fetch bookings with pagination and sorting
+// Fetch bookings with pagination
 $bookingsQuery = "SELECT bookings.id, users.name AS user_name, routes.source, routes.destination, bookings.seats_booked, 
                          bookings.payment_status, bookings.created_at 
                   FROM bookings 
@@ -40,6 +40,43 @@ $bookingsQuery = "SELECT bookings.id, users.name AS user_name, routes.source, ro
                   ORDER BY bookings.created_at DESC
                   LIMIT $limit OFFSET $offset";
 $bookingsResult = $conn->query($bookingsQuery);
+
+// Handle booking deletion and seat availability update
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['booking_id'])) {
+    $booking_id = (int)$_POST['booking_id'];
+
+    // Fetch the booking details
+    $bookingQuery = $conn->prepare("SELECT seats_booked, route_id FROM bookings WHERE id = ?");
+    $bookingQuery->bind_param('i', $booking_id);
+    $bookingQuery->execute();
+    $bookingResult = $bookingQuery->get_result();
+
+    if ($bookingResult->num_rows > 0) {
+        $booking = $bookingResult->fetch_assoc();
+        $seats_booked = explode(',', $booking['seats_booked']);
+        $route_id = $booking['route_id'];
+
+        // Update seats in the seat_availability table to "available"
+        $updateSeatsQuery = $conn->prepare("UPDATE seat_availability 
+                                            SET status = 'available' 
+                                            WHERE route_id = ? AND seat_number = ?");
+        foreach ($seats_booked as $seat_number) {
+            $updateSeatsQuery->bind_param('ii', $route_id, $seat_number);
+            $updateSeatsQuery->execute();
+        }
+
+        // Delete the booking from the bookings table
+        $deleteBookingQuery = $conn->prepare("DELETE FROM bookings WHERE id = ?");
+        $deleteBookingQuery->bind_param('i', $booking_id);
+        if ($deleteBookingQuery->execute()) {
+            $_SESSION['success_msg'] = "Booking deleted successfully.";
+        } else {
+            $_SESSION['error_msg'] = "Failed to delete booking.";
+        }
+    }
+    header("Location: manage_bookings.php");
+    exit();
+}
 ?>
 
 <!DOCTYPE html>
@@ -48,15 +85,26 @@ $bookingsResult = $conn->query($bookingsQuery);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Bookings - Admin</title>
+    <title>Manage Bookings</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 
 <body>
     <?php include("../includes/sidebar.php"); ?>
     <div class="container mt-5">
         <h1>Manage Bookings</h1>
+
+        <!-- Success/Error Messages -->
+        <?php if (isset($_SESSION['success_msg'])): ?>
+            <div class="alert alert-success"><?= $_SESSION['success_msg'] ?></div>
+            <?php unset($_SESSION['success_msg']); ?>
+        <?php endif; ?>
+        <?php if (isset($_SESSION['error_msg'])): ?>
+            <div class="alert alert-danger"><?= $_SESSION['error_msg'] ?></div>
+            <?php unset($_SESSION['error_msg']); ?>
+        <?php endif; ?>
+
+        <!-- Search and Filter -->
         <form method="GET" class="d-flex mb-3">
             <input type="text" name="search" class="form-control me-2" placeholder="Search by user, source, or destination" value="<?= htmlspecialchars($search) ?>">
             <select name="filter" class="form-select me-2">
@@ -68,6 +116,7 @@ $bookingsResult = $conn->query($bookingsQuery);
             <button type="submit" class="btn btn-primary">Search</button>
         </form>
 
+        <!-- Bookings Table -->
         <table class="table table-bordered">
             <thead>
                 <tr>
@@ -93,8 +142,14 @@ $bookingsResult = $conn->query($bookingsQuery);
                             <td><?= htmlspecialchars($booking['payment_status']) ?></td>
                             <td><?= htmlspecialchars($booking['created_at']) ?></td>
                             <td>
-                                <button class="btn btn-sm btn-danger delete-booking"
-                                    data-id="<?= $booking['id'] ?>">Delete</button>
+                                <?php if ($booking['payment_status'] === 'Pending'): ?>
+                                    <form method="POST" style="display:inline;">
+                                        <input type="hidden" name="booking_id" value="<?= $booking['id'] ?>">
+                                        <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+                                    </form>
+                                <?php else: ?>
+                                    <button class="btn btn-sm btn-secondary" disabled>No Action</button>
+                                <?php endif; ?>
                             </td>
                         </tr>
                     <?php endwhile; ?>
@@ -117,23 +172,6 @@ $bookingsResult = $conn->query($bookingsQuery);
             </ul>
         </nav>
     </div>
-
-    <script>
-        // Handle delete button click
-        $('.delete-booking').on('click', function() {
-            const bookingId = $(this).data('id');
-
-            if (confirm('Are you sure you want to delete this booking?')) {
-                $.post('delete_booking.php', {
-                    booking_id: bookingId
-                }, function(response) {
-                    alert(response.message);
-                    location.reload();
-                }, 'json');
-            }
-        });
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

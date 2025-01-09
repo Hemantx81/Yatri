@@ -39,7 +39,10 @@ $stmt = $conn->prepare("
         users.name AS user_name, 
         routes.source, 
         routes.destination, 
-        payments.created_at
+        payments.created_at,
+        bookings.id AS booking_id,
+        bookings.seats_booked,
+        bookings.route_id
     FROM payments
     JOIN bookings ON payments.booking_id = bookings.id
     JOIN users ON bookings.user_id = users.id
@@ -73,30 +76,65 @@ $total_items = $count_stmt->get_result()->fetch_assoc()['total'] ?? 0;
 $count_stmt->close();
 $total_pages = ceil($total_items / $items_per_page);
 
-// Update payment status if requested
+// Update payment status and seat availability
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $payment_id = intval($_POST['payment_id']);
     $new_status = $_POST['new_status'];
 
-    // Update the payment status in the database
-    $stmt = $conn->prepare("UPDATE payments SET payment_status = ? WHERE id = ?");
-    $stmt->bind_param("si", $new_status, $payment_id);
-    if ($stmt->execute()) {
-        // Update the payment status in the bookings table as well
-        $stmt_booking = $conn->prepare("UPDATE bookings SET payment_status = ? WHERE id = (SELECT booking_id FROM payments WHERE id = ?)");
-        $stmt_booking->bind_param("si", $new_status, $payment_id);
-        $stmt_booking->execute();
-        $stmt_booking->close();
+    // Fetch the related booking information
+    $booking_stmt = $conn->prepare("
+        SELECT bookings.seats_booked, bookings.route_id 
+        FROM bookings 
+        JOIN payments ON bookings.id = payments.booking_id 
+        WHERE payments.id = ?
+    ");
+    $booking_stmt->bind_param("i", $payment_id);
+    $booking_stmt->execute();
+    $booking = $booking_stmt->get_result()->fetch_assoc();
+    $booking_stmt->close();
 
-        $_SESSION['success_msg'] = "Payment status updated successfully.";
+    if ($booking) {
+        $seats = explode(",", $booking['seats_booked']);
+        $route_id = $booking['route_id'];
+
+        // Update the payment status in the database
+        $stmt = $conn->prepare("UPDATE payments SET payment_status = ? WHERE id = ?");
+        $stmt->bind_param("si", $new_status, $payment_id);
+
+        if ($stmt->execute()) {
+            // Update seat availability based on the payment status
+            foreach ($seats as $seat) {
+                $seat_status = ($new_status === "Completed") ? "booked" : "available";
+                $seat_stmt = $conn->prepare("
+                    UPDATE seat_availability 
+                    SET status = ? 
+                    WHERE route_id = ? AND seat_number = ?
+                ");
+                $seat_stmt->bind_param("sii", $seat_status, $route_id, $seat);
+                $seat_stmt->execute();
+                $seat_stmt->close();
+            }
+
+            // Update payment status in bookings
+            $stmt_booking = $conn->prepare("UPDATE bookings SET payment_status = ? WHERE id = (SELECT booking_id FROM payments WHERE id = ?)");
+            $stmt_booking->bind_param("si", $new_status, $payment_id);
+            $stmt_booking->execute();
+            $stmt_booking->close();
+
+            $_SESSION['success_msg'] = "Payment status updated successfully.";
+        } else {
+            $_SESSION['error_msg'] = "Failed to update payment status.";
+        }
+        $stmt->close();
     } else {
-        $_SESSION['error_msg'] = "Failed to update payment status.";
+        $_SESSION['error_msg'] = "Booking details not found.";
     }
-    $stmt->close();
+
     header("Location: pending_payments.php");
     exit();
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">

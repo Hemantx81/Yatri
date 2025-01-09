@@ -28,7 +28,7 @@ if (!empty($search)) {
 $stmt->execute();
 $result_available = $stmt->get_result();
 
-// Fetch recommended buses
+// Fetch recommended buses (top-rated)
 $query_recommended = "SELECT b.id as bus_id, b.bus_name, b.image_path, AVG(f.rating) as avg_rating 
                       FROM feedback f 
                       INNER JOIN buses b ON f.bus_id = b.id 
@@ -54,34 +54,21 @@ $total_feedback_result = $conn->query($query_feedback_count);
 $total_feedback = $total_feedback_result->fetch_assoc()['total_feedback'];
 $total_pages = ceil($total_feedback / $limit);
 
-// Check if user is logged in and has booked the bus
+// Check if user is logged in
 $is_logged_in = isset($_SESSION['user_id']);
 if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $user_id = $_SESSION['user_id'];
     $bus_id = $_POST['bus_id'];
 
-    $query_booking_check = "SELECT COUNT(*) as booked_count 
-                            FROM bookings 
-                            WHERE user_id = ? AND bus_id = ?";
-    $stmt_booking_check = $conn->prepare($query_booking_check);
-    $stmt_booking_check->bind_param("ii", $user_id, $bus_id);
-    $stmt_booking_check->execute();
-    $booking_check_result = $stmt_booking_check->get_result();
-    $booked_count = $booking_check_result->fetch_assoc()['booked_count'];
+    // Handle feedback submission here
+    $rating = $_POST['rating'];
+    $comment = $_POST['comment'];
 
-    if ($booked_count > 0) {
-        // Handle feedback submission here
-        $rating = $_POST['rating'];
-        $comment = $_POST['comment'];
-
-        $query_insert_feedback = "INSERT INTO feedback (user_id, bus_id, rating, comment) VALUES (?, ?, ?, ?)";
-        $stmt_insert_feedback = $conn->prepare($query_insert_feedback);
-        $stmt_insert_feedback->bind_param("iiis", $user_id, $bus_id, $rating, $comment);
-        $stmt_insert_feedback->execute();
-        echo "<script>alert('Feedback submitted successfully!');</script>";
-    } else {
-        echo "<script>alert('You can only provide feedback for buses you have booked.');</script>";
-    }
+    $query_insert_feedback = "INSERT INTO feedback (user_id, bus_id, rating, comment) VALUES (?, ?, ?, ?)";
+    $stmt_insert_feedback = $conn->prepare($query_insert_feedback);
+    $stmt_insert_feedback->bind_param("iiis", $user_id, $bus_id, $rating, $comment);
+    $stmt_insert_feedback->execute();
+    echo "<script>alert('Feedback submitted successfully!');</script>";
 }
 ?>
 <!DOCTYPE html>
@@ -261,6 +248,26 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
+    <!-- Recommended Buses Section -->
+    <div class="container my-5">
+        <h2>Recommended Buses (Top Rated)</h2>
+        <div class="row">
+            <?php if ($result_recommended->num_rows > 0): ?>
+                <?php while ($row = $result_recommended->fetch_assoc()): ?>
+                    <div class="col-md-4">
+                        <div class="bus-item">
+                            <img src="<?= htmlspecialchars($row['image_path']) ?>" alt="<?= htmlspecialchars($row['bus_name']) ?>">
+                            <h4><?= htmlspecialchars($row['bus_name']) ?> (Rating: <?= number_format($row['avg_rating'], 2) ?>)</h4>
+                            <a href="booking/book_ticket.php?route_id=<?= htmlspecialchars($row['bus_id']) ?>" class="btn btn-primary">Book Now</a>
+                        </div>
+                    </div>
+                <?php endwhile; ?>
+            <?php else: ?>
+                <p class="text-center">No recommended buses found.</p>
+            <?php endif; ?>
+        </div>
+    </div>
+
     <!-- Feedback Section -->
     <div class="container my-5">
         <h2>User Feedback</h2>
@@ -289,14 +296,17 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <!-- Feedback Modal Trigger -->
     <div class="text-center my-4">
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#feedbackModal">Give Feedback</button>
+        <?php if ($is_logged_in): ?>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#feedbackModal">Give Feedback</button>
+        <?php else: ?>
+            <p class="text-center">Please <a href="login.php">log in</a> to provide feedback.</p>
+        <?php endif; ?>
     </div>
 
     <!-- Feedback Modal -->
     <div class="modal fade" id="feedbackModal" tabindex="-1" aria-labelledby="feedbackModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <!-- Modified Feedback Form -->
                 <div class="modal-header">
                     <h5 class="modal-title" id="feedbackModalLabel">Give Feedback</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -307,37 +317,51 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div class="mb-3">
                                 <label for="bus_id" class="form-label">Bus</label>
                                 <select class="form-select" id="bus_id" name="bus_id" required>
-                                    <?php while ($row = $result_available->fetch_assoc()): ?>
-                                        <option value="<?= htmlspecialchars($row['route_id']) ?>"><?= htmlspecialchars($row['bus_name']) ?> - <?= htmlspecialchars($row['source']) ?> to <?= htmlspecialchars($row['destination']) ?></option>
+                                    <?php
+                                    // Fetch buses available for feedback by the logged-in user
+                                    $query_user_buses = "SELECT b.id as bus_id, b.bus_name, r.source, r.destination
+                                                         FROM buses b
+                                                         INNER JOIN routes r ON b.id = r.bus_id";
+                                    $stmt_user_buses = $conn->prepare($query_user_buses);
+                                    $stmt_user_buses->execute();
+                                    $result_user_buses = $stmt_user_buses->get_result();
+                                    ?>
+                                    <?php while ($bus = $result_user_buses->fetch_assoc()): ?>
+                                        <option value="<?= htmlspecialchars($bus['bus_id']) ?>"><?= htmlspecialchars($bus['bus_name']) ?> (<?= htmlspecialchars($bus['source']) ?> - <?= htmlspecialchars($bus['destination']) ?>)</option>
                                     <?php endwhile; ?>
                                 </select>
                             </div>
                             <div class="mb-3">
                                 <label for="rating" class="form-label">Rating</label>
                                 <div class="star-rating">
-                                    <input type="radio" id="star1" name="rating" value="1" required><label for="star1">★</label>
-                                    <input type="radio" id="star2" name="rating" value="2"><label for="star2">★</label>
-                                    <input type="radio" id="star3" name="rating" value="3"><label for="star3">★</label>
-                                    <input type="radio" id="star4" name="rating" value="4"><label for="star4">★</label>
-                                    <input type="radio" id="star5" name="rating" value="5"><label for="star5">★</label>
+                                    <input type="radio" id="star5" name="rating" value="5" required />
+                                    <label for="star5">★</label>
+                                    <input type="radio" id="star4" name="rating" value="4" />
+                                    <label for="star4">★</label>
+                                    <input type="radio" id="star3" name="rating" value="3" />
+                                    <label for="star3">★</label>
+                                    <input type="radio" id="star2" name="rating" value="2" />
+                                    <label for="star2">★</label>
+                                    <input type="radio" id="star1" name="rating" value="1" />
+                                    <label for="star1">★</label>
                                 </div>
                             </div>
                             <div class="mb-3">
                                 <label for="comment" class="form-label">Comment</label>
-                                <textarea class="form-control" id="comment" name="comment" rows="3" required></textarea>
+                                <textarea id="comment" class="form-control" name="comment" rows="3" required></textarea>
                             </div>
                             <button type="submit" class="btn btn-primary">Submit Feedback</button>
                         </form>
                     <?php else: ?>
-                        <p class="text-center">Please <a href="login.php">log in</a> to provide feedback.</p>
+                        <p>Please <a href="login.php">log in</a> to submit feedback.</p>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
     </div>
-
+    <?php include("includes/footer.php") ?>
+    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <?php include 'includes/footer.php'; ?>
 </body>
 
 </html>

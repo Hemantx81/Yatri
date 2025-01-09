@@ -8,7 +8,7 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-$route_id = (int)$_GET['route_id']; // Sanitize route_id
+$route_id = (int)$_GET['route_id'];
 
 // Fetch route and bus details
 $query = $conn->prepare("SELECT r.id AS route_id, r.source, r.destination, r.departure_time, r.arrival_time, r.price, 
@@ -25,10 +25,10 @@ if ($route_result->num_rows === 0) {
 }
 
 $route = $route_result->fetch_assoc();
-$bus_id = $route['bus_id'];  // Get the bus_id for this route
+$bus_id = $route['bus_id'];
 
-// Fetch seat availability based on route_id and bus_id
-$seat_query = $conn->prepare("SELECT seat_number, status 
+// Fetch seat availability
+$seat_query = $conn->prepare("SELECT seat_number, status, booking_time 
                               FROM seat_availability 
                               WHERE route_id = ? AND bus_id = ?");
 $seat_query->bind_param('ii', $route_id, $bus_id);
@@ -37,7 +37,7 @@ $seat_result = $seat_query->get_result();
 
 $seats = [];
 while ($row = $seat_result->fetch_assoc()) {
-    $seats[$row['seat_number']] = $row['status']; // Status can be 'available', 'reserved', or 'booked'
+    $seats[$row['seat_number']] = $row['status'];
 }
 
 // Handle form submission
@@ -46,13 +46,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user_id = $_SESSION['user_id'];
 
     if (empty($selected_seats)) {
-        echo "<script>alert('Please select at least one seat.');</script>";
+        echo "<script>alert('Please select at least one seat to proceed.');</script>";
     } elseif (count($selected_seats) > 5) {
         echo "<script>alert('You can select a maximum of 5 seats.');</script>";
     } else {
         // Validate selected seats
         $placeholders = implode(',', array_fill(0, count($selected_seats), '?'));
-        $validation_query = $conn->prepare("SELECT seat_number, status 
+        $validation_query = $conn->prepare("SELECT seat_number 
                                             FROM seat_availability 
                                             WHERE route_id = ? AND bus_id = ? AND seat_number IN ($placeholders) AND status != 'available'");
         $params = array_merge([$route_id, $bus_id], $selected_seats);
@@ -64,9 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $conflict_seats = implode(', ', array_column($conflict_result->fetch_all(MYSQLI_ASSOC), 'seat_number'));
             echo "<script>alert('The following seats are already booked or reserved: $conflict_seats');</script>";
         } else {
-            // Reserve the seats and save booking
+            // Reserve the seats
             $reserve_query = $conn->prepare("UPDATE seat_availability 
-                                            SET status = 'reserved' 
+                                            SET status = 'reserved', booking_time = NOW() 
                                             WHERE route_id = ? AND bus_id = ? AND seat_number IN ($placeholders)");
             $reserve_query->bind_param(str_repeat('i', count($params)), ...$params);
             $reserve_query->execute();
@@ -98,54 +98,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         .seat {
-            width: 35px;
-            height: 35px;
-            margin: 4px;
+            width: 40px;
+            height: 40px;
+            margin: 6px;
             text-align: center;
-            line-height: 35px;
+            line-height: 40px;
             border: 1px solid #ccc;
             border-radius: 5px;
             cursor: pointer;
+            transition: transform 0.2s, background-color 0.2s;
         }
 
         /* Seat Colors */
         .seat.available {
             background-color: #28a745;
-            /* Green for available seats */
             color: white;
         }
 
         .seat.reserved {
             background-color: #ffc107;
-            /* Yellow for reserved seats */
             color: white;
             cursor: not-allowed;
         }
 
         .seat.booked {
             background-color: #dc3545;
-            /* Red for booked seats */
             color: white;
             cursor: not-allowed;
         }
 
         .seat.selected {
             background-color: #007bff;
-            /* Blue for selected seats */
             color: white;
+        }
+
+        /* Seat Hover Effect */
+        .seat:hover:not(.reserved):not(.booked) {
+            transform: scale(1.1);
         }
 
         /* Seat Map Layout */
         .seat-map {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
-            /* 6 seats per row */
             gap: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }
 
         .legend {
             margin-top: 20px;
+        }
+
+        .btn-primary {
+            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -176,7 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="seat-map">
                 <?php
                 for ($i = 1; $i <= $route['total_seats']; $i++) {
-                    $seat_status = $seats[$i] ?? 'available'; // Default to available if not found
+                    $seat_status = $seats[$i] ?? 'available';
                     $seat_class = "seat $seat_status";
                     echo "<div class='$seat_class' data-seat='$i'>$i</div>";
                 }
@@ -201,6 +206,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     alert(`You can select up to ${maxSeats} seats only.`);
                 }
             });
+        });
+
+        document.getElementById('seatForm').addEventListener('submit', function(e) {
+            if (!document.getElementById('selectedSeats').value) {
+                e.preventDefault();
+                alert('Please select at least one seat to proceed.');
+            }
         });
     </script>
 </body>
