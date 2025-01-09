@@ -10,7 +10,7 @@ $offset = ($page - 1) * $items_per_page;
 
 // Handle search/filter
 $search_query = isset($_GET['search']) ? $_GET['search'] : '';
-$filter_method = isset($_GET['method']) ? $_GET['method'] : '';
+$filter_method = isset($_GET['method']) ? $_GET['method'] : ''; // Check if 'method' key exists
 $where_clauses = ["payments.payment_status = 'Pending'"];
 $params = [];
 
@@ -82,6 +82,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt = $conn->prepare("UPDATE payments SET payment_status = ? WHERE id = ?");
     $stmt->bind_param("si", $new_status, $payment_id);
     if ($stmt->execute()) {
+        // Update the payment status in the bookings table as well
+        $stmt_booking = $conn->prepare("UPDATE bookings SET payment_status = ? WHERE id = (SELECT booking_id FROM payments WHERE id = ?)");
+        $stmt_booking->bind_param("si", $new_status, $payment_id);
+        $stmt_booking->execute();
+        $stmt_booking->close();
+
         $_SESSION['success_msg'] = "Payment status updated successfully.";
     } else {
         $_SESSION['error_msg'] = "Failed to update payment status.";
@@ -91,7 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit();
 }
 ?>
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -158,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <td><?= htmlspecialchars($payment['user_name']) ?></td>
                             <td><?= htmlspecialchars($payment['source'] . " to " . $payment['destination']) ?></td>
                             <td><?= number_format($payment['payment_amount'], 2) ?></td>
-                            <td><?= htmlspecialchars($payment['method']) ?></td>
+                            <td><?= htmlspecialchars($payment['payment_method']) ?></td>
                             <td><?= htmlspecialchars($payment['created_at']) ?></td>
                             <td>
                                 <form method="POST" style="display:inline;">

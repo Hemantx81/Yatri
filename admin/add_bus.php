@@ -73,58 +73,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
-            margin-top: 20px;
+            background-color: #f8f9fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .card {
+            border: none;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            background-color: #fff;
         }
 
         .form-control {
-            max-width: 400px;
+            border-radius: 5px;
         }
 
-        .form-check {
+        .form-check-label {
+            margin-left: 5px;
+        }
+
+        .btn {
+            width: 100%;
             margin-top: 10px;
+            border-radius: 5px;
         }
 
-        .btn-primary {
-            margin-top: 15px;
-        }
-
-        .container {
-            max-width: 600px;
+        .form-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #333;
         }
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <h2 class="text-center">Add New Bus</h2>
+    <div class="card p-4">
+        <h2 class="form-title text-center">Add New Bus</h2>
         <?php if (isset($success)): ?>
-            <div class="alert alert-success"><?php echo $success; ?></div>
+            <div class="alert alert-success text-center"><?php echo $success; ?></div>
         <?php endif; ?>
         <?php if (isset($error)): ?>
-            <div class="alert alert-danger"><?php echo $error; ?></div>
+            <div class="alert alert-danger text-center"><?php echo $error; ?></div>
         <?php endif; ?>
         <form method="POST" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="bus_name">Bus Name:</label>
-                <input type="text" name="bus_name" class="form-control" required>
+            <div class="form-group mb-3">
+                <label for="bus_name" class="form-label">Bus Name:</label>
+                <input type="text" name="bus_name" class="form-control" placeholder="Enter bus name" required>
             </div>
-            <div class="form-group">
-                <label for="total_seats">Total Seats:</label>
-                <input type="number" name="total_seats" class="form-control" required>
+            <div class="form-group mb-3">
+                <label for="total_seats" class="form-label">Total Seats:</label>
+                <input type="number" name="total_seats" class="form-control" placeholder="Enter total seats" required>
             </div>
-            <div class="form-group">
-                <label for="bus_image">Bus Image:</label>
+            <div class="form-group mb-3">
+                <label for="bus_image" class="form-label">Bus Image:</label>
                 <input type="file" name="bus_image" class="form-control" accept="image/*">
             </div>
-            <div class="form-check">
+            <div class="form-check mb-2">
                 <input type="checkbox" name="is_ac" class="form-check-input" id="is_ac">
                 <label class="form-check-label" for="is_ac">AC Available</label>
             </div>
-            <div class="form-check">
+            <div class="form-check mb-3">
                 <input type="checkbox" name="is_wifi" class="form-check-input" id="is_wifi">
                 <label class="form-check-label" for="is_wifi">Wi-Fi Available</label>
             </div>
             <button type="submit" class="btn btn-primary">Add Bus</button>
+            <a href="view_buses.php" class="btn btn-secondary">View Buses</a>
         </form>
     </div>
 </body>

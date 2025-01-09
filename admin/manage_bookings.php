@@ -1,8 +1,6 @@
 <?php
-// Start session
+// Start session and include config file
 session_start();
-
-// Include necessary files
 include("../includes/config.php");
 
 // Pagination settings
@@ -95,9 +93,6 @@ $bookingsResult = $conn->query($bookingsQuery);
                             <td><?= htmlspecialchars($booking['payment_status']) ?></td>
                             <td><?= htmlspecialchars($booking['created_at']) ?></td>
                             <td>
-                                <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#updateModal"
-                                    data-id="<?= $booking['id'] ?>"
-                                    data-status="<?= $booking['payment_status'] ?>">Update</button>
                                 <button class="btn btn-sm btn-danger delete-booking"
                                     data-id="<?= $booking['id'] ?>">Delete</button>
                             </td>
@@ -123,57 +118,7 @@ $bookingsResult = $conn->query($bookingsQuery);
         </nav>
     </div>
 
-    <!-- Update Modal -->
-    <div class="modal fade" id="updateModal" tabindex="-1" aria-labelledby="updateModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <form id="updateForm">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="updateModalLabel">Update Booking</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <input type="hidden" name="booking_id" id="bookingId">
-                        <div class="mb-3">
-                            <label for="paymentStatus" class="form-label">Payment Status</label>
-                            <select name="payment_status" id="paymentStatus" class="form-select">
-                                <option value="Pending">Pending</option>
-                                <option value="Completed">Completed</option>
-                                <option value="Failed">Failed</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-primary">Save changes</button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <script>
-        // Populate the modal with data
-        $('#updateModal').on('show.bs.modal', function(event) {
-            const button = $(event.relatedTarget);
-            const bookingId = button.data('id');
-            const paymentStatus = button.data('status');
-
-            $('#bookingId').val(bookingId);
-            $('#paymentStatus').val(paymentStatus);
-        });
-
-        // Handle update form submission
-        $('#updateForm').on('submit', function(event) {
-            event.preventDefault();
-            const formData = $(this).serialize();
-
-            $.post('update_booking.php', formData, function(response) {
-                alert(response.message);
-                location.reload();
-            }, 'json');
-        });
-
         // Handle delete button click
         $('.delete-booking').on('click', function() {
             const bookingId = $(this).data('id');
