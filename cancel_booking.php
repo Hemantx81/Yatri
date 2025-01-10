@@ -50,38 +50,42 @@ if (($current_time - $booking_time) > 7200) { // 7200 seconds = 2 hours
 }
 
 // Start cancellation process
-$seat_numbers = explode(",", $booking['seats_booked']);
-$route_id = $booking['route_id'];
+$conn->begin_transaction(); // Begin transaction for consistency
 
-// Update seat availability (set status to 'Available')
-$placeholders = implode(',', array_fill(0, count($seat_numbers), '?'));
-$update_seat_query = "UPDATE seat_availability 
-                      SET status = 'Available', booking_time = NULL 
-                      WHERE route_id = ? AND seat_number IN ($placeholders)";
-$stmt = $conn->prepare($update_seat_query);
+try {
+    $seat_numbers = explode(",", $booking['seats_booked']);
+    $route_id = $booking['route_id'];
 
-// Bind parameters dynamically
-$types = 'i' . str_repeat('s', count($seat_numbers));
-$params = array_merge([$route_id], $seat_numbers);
-$stmt->bind_param($types, ...$params);
-$stmt->execute();
+    // Update seat availability (set status to 'Available')
+    $placeholders = implode(',', array_fill(0, count($seat_numbers), '?'));
+    $update_seat_query = "UPDATE seat_availability 
+                          SET status = 'Available', booking_time = NULL 
+                          WHERE route_id = ? AND seat_number IN ($placeholders)";
+    $stmt = $conn->prepare($update_seat_query);
 
-// Remove the seat numbers from the frontend and database
-$delete_ticket_query = "DELETE FROM seat_availability 
-                        WHERE route_id = ? AND seat_number IN ($placeholders)";
-$stmt = $conn->prepare($delete_ticket_query);
-$stmt->bind_param($types, ...$params);
-$stmt->execute();
+    // Bind parameters dynamically
+    $types = 'i' . str_repeat('i', count($seat_numbers));
+    $params = array_merge([$route_id], $seat_numbers);
+    $stmt->bind_param($types, ...$params);
+    $stmt->execute();
 
-// Update the booking status to "Canceled"
-$update_booking_query = "UPDATE bookings 
-                         SET payment_status = 'Canceled' 
-                         WHERE id = ?";
-$stmt = $conn->prepare($update_booking_query);
-$stmt->bind_param("i", $booking_id);
-$stmt->execute();
+    // Update the booking status to "Failed"
+    $update_booking_query = "UPDATE bookings 
+                             SET payment_status = 'Failed' 
+                             WHERE id = ?";
+    $stmt = $conn->prepare($update_booking_query);
+    $stmt->bind_param("i", $booking_id);
+    $stmt->execute();
 
-// Set success message and redirect
-$_SESSION['message'] = "Booking has been successfully canceled and tickets removed.";
-header("Location: user_dashboard.php");
-exit();
+    $conn->commit(); // Commit the transaction
+
+    // Set success message
+    $_SESSION['message'] = "Booking has been successfully canceled. Payment status updated to 'Failed' and seats are now available.";
+    header("Location: user_dashboard.php");
+    exit();
+} catch (Exception $e) {
+    $conn->rollback(); // Rollback transaction in case of error
+    $_SESSION['error'] = "An error occurred while canceling the booking. Please try again.";
+    header("Location: user_dashboard.php");
+    exit();
+}

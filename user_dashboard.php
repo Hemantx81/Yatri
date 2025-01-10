@@ -21,10 +21,11 @@ $limit = 5; // Number of bookings per page
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-$booking_query = "SELECT b.id, r.source, r.destination, r.departure_time, b.seats_booked, b.payment_status, b.created_at
+$booking_query = "SELECT b.id, r.source, r.destination, r.departure_time, b.seats_booked, b.payment_status, b.created_at, b.route_id 
                   FROM bookings b
                   JOIN routes r ON b.route_id = r.id
                   WHERE b.user_id = ?
+                  ORDER BY b.created_at DESC
                   LIMIT ? OFFSET ?";
 $stmt = $conn->prepare($booking_query);
 $stmt->bind_param("iii", $user_id, $limit, $offset);
@@ -48,7 +49,6 @@ $total_pages = ceil($total_bookings / $limit);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>User Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/user_dashboard.css">
 </head>
 
 <body>
@@ -57,6 +57,7 @@ $total_pages = ceil($total_bookings / $limit);
 
         <!-- Buttons Section -->
         <div class="mt-4">
+            <a href="index.php" class="btn btn-secondary">Go to Home</a>
             <a href="#" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#updateProfileModal">Update Profile</a>
             <a href="logout.php" class="btn btn-danger">Logout</a>
         </div>
@@ -87,14 +88,17 @@ $total_pages = ceil($total_bookings / $limit);
                             <td><?= htmlspecialchars($booking['payment_status']) ?></td>
                             <td>
                                 <?php
-                                $booking_age = time() - strtotime($booking['created_at']);
-                                if ($booking['payment_status'] === 'Pending' && $booking_age > 7200): // More than 2 hours
+                                $booking_time = strtotime($booking['created_at']);
+                                $current_time = time();
+                                $time_difference = $current_time - $booking_time;
+
+                                if ($booking['payment_status'] === 'Pending' && $time_difference <= 7200): // Less than 2 hours
                                 ?>
                                     <button class="btn btn-danger btn-sm" onclick="cancelBooking(<?= $booking['id'] ?>)">Cancel</button>
-                                <?php elseif ($booking['payment_status'] === 'Canceled'): ?>
-                                    <span class="text-muted">Canceled</span>
-                                <?php else: ?>
+                                <?php elseif ($booking['payment_status'] === 'Completed'): ?>
                                     <a href="download_ticket.php?booking_id=<?= $booking['id'] ?>" class="btn btn-success btn-sm">Download Ticket</a>
+                                <?php else: ?>
+                                    <span class="text-muted">No actions available</span>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -159,7 +163,7 @@ $total_pages = ceil($total_bookings / $limit);
                     .then(data => {
                         if (data.status === 'success') {
                             alert(data.message);
-                            document.getElementById(`booking-row-${bookingId}`).remove();
+                            location.reload(); // Refresh the page to reflect changes
                         } else {
                             alert("Failed to cancel booking: " + data.message);
                         }
