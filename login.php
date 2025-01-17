@@ -6,7 +6,7 @@ include("includes/config.php"); // Include database configuration
 $error = "";
 $success = "";
 $login_attempts_limit = 5; // Set a limit for failed login attempts
-$lockout_time = 15 * 60; // Lockout time in seconds (15 minutes)
+$lockout_time = 2 * 60; // Lockout time in seconds (15 minutes)
 
 // Handle login form submission
 if ($_SERVER["REQUEST_METHOD"] == "POST") {

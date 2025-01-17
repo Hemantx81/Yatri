@@ -2,30 +2,32 @@
 session_start();
 include('../includes/config.php');
 
-// Pagination variables
-$perPage = 10; // Routes per page
+// Pagination and search variables
+$perPage = 10;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $perPage;
-
-// Search functionality
 $searchTerm = isset($_GET['search']) ? '%' . $_GET['search'] . '%' : '%';
 $filterBus = isset($_GET['bus_filter']) ? $_GET['bus_filter'] : '';
 
-// Query to get routes
+// Query for routes
 $query = "
-    SELECT r.id, r.source, r.destination, r.departure_time, r.arrival_time, r.price, b.bus_name
+    SELECT r.id, r.source, r.destination, r.departure_time, r.arrival_time, r.price, b.bus_name,
+           TIMESTAMPDIFF(MINUTE, r.departure_time, r.arrival_time) AS duration
     FROM routes r
     JOIN buses b ON r.bus_id = b.id
     WHERE (r.source LIKE ? OR r.destination LIKE ? OR b.bus_name LIKE ?)
     " . ($filterBus ? "AND b.bus_name = ?" : "") . "
     LIMIT ?, ?
 ";
+
 $stmt = $conn->prepare($query);
+
 if ($filterBus) {
-    $stmt->bind_param("ssssi", $searchTerm, $searchTerm, $searchTerm, $filterBus, $offset, $perPage);
+    $stmt->bind_param("ssssii", $searchTerm, $searchTerm, $searchTerm, $filterBus, $offset, $perPage);
 } else {
     $stmt->bind_param("ssssi", $searchTerm, $searchTerm, $searchTerm, $offset, $perPage);
 }
+
 $stmt->execute();
 $result = $stmt->get_result();
 
@@ -37,11 +39,13 @@ $countQuery = "
     WHERE (r.source LIKE ? OR r.destination LIKE ? OR b.bus_name LIKE ?)
     " . ($filterBus ? "AND b.bus_name = ?" : "");
 $countStmt = $conn->prepare($countQuery);
+
 if ($filterBus) {
     $countStmt->bind_param("ssss", $searchTerm, $searchTerm, $searchTerm, $filterBus);
 } else {
     $countStmt->bind_param("sss", $searchTerm, $searchTerm, $searchTerm);
 }
+
 $countStmt->execute();
 $countResult = $countStmt->get_result()->fetch_assoc();
 $totalRoutes = $countResult['total'];
@@ -74,28 +78,6 @@ $totalPages = ceil($totalRoutes / $perPage);
         .pagination {
             justify-content: center;
         }
-
-        .search-filter {
-            margin-bottom: 20px;
-        }
-
-        .search-filter input,
-        .search-filter select {
-            margin-right: 10px;
-        }
-
-        .search-filter button {
-            margin-left: 5px;
-        }
-
-        .clear-btn {
-            margin-left: 10px;
-            color: #007bff;
-        }
-
-        .clear-btn:hover {
-            text-decoration: underline;
-        }
     </style>
 </head>
 
@@ -105,7 +87,7 @@ $totalPages = ceil($totalRoutes / $perPage);
         <h2 class="text-center mb-4">Manage Routes</h2>
 
         <!-- Search and Filter Section -->
-        <div class="d-flex justify-content-between mb-3 search-filter">
+        <div class="d-flex justify-content-between mb-3">
             <form action="manage_routes.php" method="GET" class="d-flex">
                 <input type="text" name="search" class="form-control me-2" placeholder="Search by bus, source, or destination" value="<?= isset($_GET['search']) ? htmlspecialchars($_GET['search']) : '' ?>">
                 <select name="bus_filter" class="form-control me-2">
@@ -113,13 +95,12 @@ $totalPages = ceil($totalRoutes / $perPage);
                     <?php
                     $busQuery = "SELECT DISTINCT bus_name FROM buses";
                     $busResult = $conn->query($busQuery);
-                    while ($bus = $busResult->fetch_assoc()):
-                    ?>
+                    while ($bus = $busResult->fetch_assoc()): ?>
                         <option value="<?= $bus['bus_name'] ?>" <?= $filterBus === $bus['bus_name'] ? 'selected' : '' ?>><?= $bus['bus_name'] ?></option>
                     <?php endwhile; ?>
                 </select>
                 <button type="submit" class="btn btn-primary">Search</button>
-                <a href="manage_routes.php" class="btn btn-secondary clear-btn">Clear</a>
+                <a href="manage_routes.php" class="btn btn-secondary">Clear</a>
             </form>
             <a href="add_route.php" class="btn btn-success">Add Route</a>
         </div>
@@ -135,12 +116,13 @@ $totalPages = ceil($totalRoutes / $perPage);
                     <th>Departure Time</th>
                     <th>Arrival Time</th>
                     <th>Price (NPR)</th>
+                    <th>Duration (min)</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 <?php while ($route = $result->fetch_assoc()): ?>
-                    <tr>
+                    <tr id="route_<?= $route['id'] ?>">
                         <td><?= $route['id'] ?></td>
                         <td><?= $route['bus_name'] ?></td>
                         <td><?= $route['source'] ?></td>
@@ -148,6 +130,7 @@ $totalPages = ceil($totalRoutes / $perPage);
                         <td><?= date('Y-m-d H:i', strtotime($route['departure_time'])) ?></td>
                         <td><?= date('Y-m-d H:i', strtotime($route['arrival_time'])) ?></td>
                         <td>रू <?= number_format($route['price'], 2) ?></td>
+                        <td><?= $route['duration'] ?> mins</td>
                         <td class="actions">
                             <!-- Edit Button -->
                             <button class="btn btn-warning btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#updateModal" data-route_id="<?= $route['id'] ?>" data-bus_name="<?= $route['bus_name'] ?>" data-source="<?= $route['source'] ?>" data-destination="<?= $route['destination'] ?>" data-departure_time="<?= $route['departure_time'] ?>" data-arrival_time="<?= $route['arrival_time'] ?>" data-price="<?= $route['price'] ?>">Edit</button>
@@ -187,8 +170,8 @@ $totalPages = ceil($totalRoutes / $perPage);
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="updateForm">
-                        <input type="hidden" name="route_id" id="route_id">
+                    <form id="updateRouteForm">
+                        <input type="hidden" id="route_id" name="route_id">
                         <div class="mb-3">
                             <label for="bus_name" class="form-label">Bus Name</label>
                             <input type="text" name="bus_name" id="bus_name" class="form-control" required>
@@ -220,18 +203,18 @@ $totalPages = ceil($totalRoutes / $perPage);
         </div>
     </div>
 
-    <!-- JavaScript -->
     <script>
-        // Populate modal fields when Edit button is clicked
-        document.querySelectorAll('.edit-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                const routeId = this.getAttribute('data-route_id');
-                const busName = this.getAttribute('data-bus_name');
-                const source = this.getAttribute('data-source');
-                const destination = this.getAttribute('data-destination');
-                const departureTime = this.getAttribute('data-departure_time');
-                const arrivalTime = this.getAttribute('data-arrival_time');
-                const price = this.getAttribute('data-price');
+        // Modal population logic
+        document.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const button = e.target;
+                const routeId = button.getAttribute('data-route_id');
+                const busName = button.getAttribute('data-bus_name');
+                const source = button.getAttribute('data-source');
+                const destination = button.getAttribute('data-destination');
+                const departureTime = button.getAttribute('data-departure_time');
+                const arrivalTime = button.getAttribute('data-arrival_time');
+                const price = button.getAttribute('data-price');
 
                 document.getElementById('route_id').value = routeId;
                 document.getElementById('bus_name').value = busName;
@@ -243,36 +226,56 @@ $totalPages = ceil($totalRoutes / $perPage);
             });
         });
 
-        // Handle form submission for route update
-        document.getElementById('updateForm').addEventListener('submit', function(e) {
+        // Update route on form submission
+        document.getElementById('updateRouteForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const formData = new FormData(this);
-            fetch('route_actions.php?action=update', {
+            formData.append('action', 'update'); // Add action to the form data
+
+            fetch('route_actions.php', {
                     method: 'POST',
                     body: formData
                 })
                 .then(response => response.json())
                 .then(data => {
-                    alert(data.message);
-                    location.reload(); // Reload the page to see the changes
+                    if (data.message) {
+                        alert(data.message); // Show success or error message
+                        if (data.message === 'Route updated successfully.') {
+                            location.reload(); // Reload page after successful update
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error updating route: ' + error);
                 });
         });
 
-        // Handle route deletion
-        document.querySelectorAll('.delete-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                const routeId = this.getAttribute('data-route_id');
+        // Delete route
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const routeId = e.target.getAttribute('data-route_id');
                 if (confirm('Are you sure you want to delete this route?')) {
-                    fetch('route_actions.php?action=delete', {
+                    fetch('route_actions.php', {
                             method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
                             body: new URLSearchParams({
-                                route_id: routeId
-                            })
+                                action: 'delete',
+                                route_id: routeId,
+                            }),
                         })
                         .then(response => response.json())
                         .then(data => {
                             alert(data.message);
-                            location.reload(); // Reload the page to remove the route
+                            if (data.message === 'Route deleted successfully.') {
+                                document.getElementById('route_id' + routeId).remove();
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Error deleting route.');
                         });
                 }
             });

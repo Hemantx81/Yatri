@@ -3,13 +3,7 @@
 session_start();
 include("../includes/config.php");
 
-// Check if the user is logged in and is an admin
-// if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
-//     header("Location: login.php"); // Redirect to login if not logged in or not an admin
-//     exit();
-// }
-
-// Check if the user ID is provided
+// Check if the user ID is provided and valid
 if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
     $_SESSION['error'] = "Invalid user ID.";
     header("Location: manage_users.php");
@@ -18,7 +12,7 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 
 // Fetch user details from the database
 $user_id = $_GET['id'];
-$query = "SELECT id, name, email,  created_at FROM users WHERE id = ?";
+$query = "SELECT id, name, email, phone, created_at FROM users WHERE id = ?";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
@@ -30,7 +24,6 @@ if (!$user) {
     header("Location: manage_users.php");
     exit();
 }
-
 ?>
 
 <!DOCTYPE html>
@@ -70,20 +63,12 @@ if (!$user) {
             margin-bottom: 30px;
         }
 
-        .user-details {
-            margin-bottom: 30px;
-        }
-
         .user-details p {
             font-size: 1.1rem;
         }
 
-        .error {
-            color: red;
-        }
-
-        .success {
-            color: green;
+        .alert {
+            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -112,7 +97,7 @@ if (!$user) {
                     <p><strong>ID:</strong> <?= htmlspecialchars($user['id']) ?></p>
                     <p><strong>Name:</strong> <?= htmlspecialchars($user['name']) ?></p>
                     <p><strong>Email:</strong> <?= htmlspecialchars($user['email']) ?></p>
-                    <!-- <p><strong>Role:</strong> <?= htmlspecialchars($user['role']) ?></p> -->
+                    <p><strong>Phone:</strong> <?= htmlspecialchars($user['phone']) ?></p>
                     <p><strong>Account Created At:</strong> <?= htmlspecialchars($user['created_at']) ?></p>
                 </div>
 

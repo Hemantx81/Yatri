@@ -3,28 +3,26 @@
 session_start();
 include("../includes/config.php");
 
-
-
 // Pagination setup
 $limit = 10; // Number of users per page
-$page = isset($_GET['page']) ? $_GET['page'] : 1;
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $start_from = ($page - 1) * $limit;
 
-// Search filter (by name or email)
+// Search filter (by name, email, or phone)
 $search = isset($_GET['search']) ? $_GET['search'] : '';
 
 // Fetch users based on search and pagination
-$query = "SELECT id, name, email FROM users WHERE name LIKE ? OR email LIKE ? LIMIT ?, ?";
+$query = "SELECT id, name, email, phone FROM users WHERE name LIKE ? OR email LIKE ? OR phone LIKE ? LIMIT ?, ?";
 $stmt = $conn->prepare($query);
 $search_term = '%' . $search . '%';
-$stmt->bind_param("ssii", $search_term, $search_term, $start_from, $limit);
+$stmt->bind_param("sssii", $search_term, $search_term, $search_term, $start_from, $limit);
 $stmt->execute();
 $users = $stmt->get_result();
 
 // Fetch total number of users (for pagination)
-$count_query = "SELECT COUNT(*) AS total FROM users WHERE name LIKE ? OR email LIKE ?";
+$count_query = "SELECT COUNT(*) AS total FROM users WHERE name LIKE ? OR email LIKE ? OR phone LIKE ?";
 $count_stmt = $conn->prepare($count_query);
-$count_stmt->bind_param("ss", $search_term, $search_term);
+$count_stmt->bind_param("sss", $search_term, $search_term, $search_term);
 $count_stmt->execute();
 $count_result = $count_stmt->get_result()->fetch_assoc();
 $total_users = $count_result['total'];
@@ -32,14 +30,7 @@ $total_pages = ceil($total_users / $limit);
 
 // Handle user deletion
 if (isset($_GET['delete_id'])) {
-    $delete_id = $_GET['delete_id'];
-
-    // Ensure the user cannot delete their own account
-    if ($delete_id == $_SESSION['user_id']) {
-        $_SESSION['error'] = "You cannot delete your own account.";
-        header("Location: manage_users.php");
-        exit();
-    }
+    $delete_id = (int)$_GET['delete_id'];
 
     // Delete user from the database
     $delete_query = "DELETE FROM users WHERE id = ?";
@@ -53,7 +44,6 @@ if (isset($_GET['delete_id'])) {
     header("Location: manage_users.php");
     exit();
 }
-
 ?>
 
 <!DOCTYPE html>
@@ -93,26 +83,9 @@ if (isset($_GET['delete_id'])) {
             margin-bottom: 30px;
         }
 
-        .dashboard-card table {
-            width: 100%;
-            margin-bottom: 20px;
-        }
-
         .table th,
         .table td {
             text-align: center;
-        }
-
-        .table td {
-            vertical-align: middle;
-        }
-
-        .error {
-            color: red;
-        }
-
-        .success {
-            color: green;
         }
 
         .pagination {
@@ -144,7 +117,7 @@ if (isset($_GET['delete_id'])) {
                 <h1>Manage Users</h1>
                 <form action="manage_users.php" method="GET" class="mb-4">
                     <div class="input-group">
-                        <input type="text" name="search" class="form-control" placeholder="Search by name or email" value="<?= htmlspecialchars($search) ?>">
+                        <input type="text" name="search" class="form-control" placeholder="Search by name, email, or phone" value="<?= htmlspecialchars($search) ?>">
                         <button class="btn btn-primary" type="submit">Search</button>
                     </div>
                 </form>
@@ -155,24 +128,20 @@ if (isset($_GET['delete_id'])) {
                             <th>ID</th>
                             <th>Name</th>
                             <th>Email</th>
-                            <!-- <th>Role</th> -->
+                            <th>Phone</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php while ($user = $users->fetch_assoc()) : ?>
+                        <?php while ($user = $users->fetch_assoc()): ?>
                             <tr>
                                 <td><?= htmlspecialchars($user['id']) ?></td>
                                 <td><?= htmlspecialchars($user['name']) ?></td>
                                 <td><?= htmlspecialchars($user['email']) ?></td>
-                                <!-- <td><?= htmlspecialchars($user['role']) ?></td> -->
+                                <td><?= htmlspecialchars($user['phone']) ?></td>
                                 <td>
-                                    <?php if ($user['id'] != $_SESSION['user_id']): ?>
-                                        <a href="manage_users.php?delete_id=<?= $user['id'] ?>" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete this user?')">Delete</a>
-                                        <a href="view_user.php?id=<?= $user['id'] ?>" class="btn btn-info">View Details</a>
-                                    <?php else: ?>
-                                        <span class="text-muted">Cannot delete your own account</span>
-                                    <?php endif; ?>
+                                    <a href="manage_users.php?delete_id=<?= $user['id'] ?>" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete this user?')">Delete</a>
+                                    <a href="view_user.php?id=<?= $user['id'] ?>" class="btn btn-info">View Details</a>
                                 </td>
                             </tr>
                         <?php endwhile; ?>

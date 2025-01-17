@@ -87,7 +87,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 
@@ -96,63 +95,123 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Book Ticket</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <style>
+        .seats-layout {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+            padding: 10px 0;
+        }
+
+        .seat-column {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .seat-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .column-separator {
+            width: 5px;
+            height: 100%;
+            background: #ddd;
+            border-radius: 2px;
+        }
+
         .seat {
-            width: 40px;
-            height: 40px;
-            margin: 6px;
-            text-align: center;
-            line-height: 40px;
+            width: 50px;
+            height: 50px;
+            background: #007bff;
             border: 1px solid #ccc;
             border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
             cursor: pointer;
             transition: transform 0.2s, background-color 0.2s;
         }
 
-        /* Seat Colors */
-        .seat.available {
-            background-color: #28a745;
-            color: white;
-        }
-
         .seat.reserved {
-            background-color: #ffc107;
-            color: white;
-            cursor: not-allowed;
-        }
-
-        .seat.booked {
-            background-color: #dc3545;
-            color: white;
+            background: #ffc107;
             cursor: not-allowed;
         }
 
         .seat.selected {
-            background-color: #007bff;
-            color: white;
+            background: #5cb85c;
         }
 
-        /* Seat Hover Effect */
-        .seat:hover:not(.reserved):not(.booked) {
+        .seat:hover:not(.reserved):not(.selected) {
             transform: scale(1.1);
         }
 
-        /* Seat Map Layout */
-        .seat-map {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 8px;
-            margin-bottom: 30px;
-        }
-
-        .legend {
+        .door-container {
             margin-top: 20px;
+            display: flex;
+            justify-content: flex-end;
         }
 
-        .btn-primary {
-            margin-bottom: 20px;
+        .door {
+            width: 60px;
+            height: 40px;
+            background: #444;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 5px;
+            border: 2px solid #000;
+        }
+
+        /* Legend Styles */
+        .legend .seat {
+            width: 20px;
+            height: 20px;
+            margin: 0 5px;
+            border-radius: 3px;
+            display: inline-block;
+            border: 1px solid #ccc;
+        }
+
+        .legend .available {
+            background-color: #007bff;
+        }
+
+        .legend .reserved {
+            background-color: #ffc107;
+        }
+
+        .legend .booked {
+            background-color: #dc3545;
+        }
+
+        .legend .selected {
+            background-color: #5cb85c;
+        }
+
+        /* Door Positioning */
+        .door-container {
+            position: absolute;
+            top: 50px;
+            left: -50px;
+        }
+
+        /* Driver Image Styling */
+        .driver-area img {
+            display: block;
+            margin: 0 auto;
+            border-radius: 50%;
         }
     </style>
+
+
 </head>
 
 <body>
@@ -169,47 +228,121 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <p><strong>Wi-Fi:</strong> <?= $route['is_wifi'] ? 'Yes' : 'No'; ?></p>
         </div>
 
-        <div class="legend">
-            <h5>Seat Legend</h5>
-            <p><span class="badge bg-success">Available</span> - You can select this seat</p>
-            <p><span class="badge bg-warning">Reserved</span> - This seat is currently reserved</p>
-            <p><span class="badge bg-danger">Booked</span> - This seat is already booked</p>
+        <div class="text-center">
+            <button class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#seatModal">Select Seats</button>
+        </div>
+        <!-- Modal for seats -->
+        <div class="modal fade" id="seatModal" tabindex="-1" aria-labelledby="seatModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="seatModalLabel">Select Seats</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="legend text-center mb-4">
+                            <div class="d-flex justify-content-center align-items-center gap-3">
+                                <div class="seat available"></div> <span>Available</span>
+                                <div class="seat reserved"></div> <span>Reserved</span>
+                                <div class="seat booked"></div> <span>Booked</span>
+                                <div class="seat selected"></div> <span>Selected</span>
+                            </div>
+                        </div>
+                        <div class="bus-container mx-xl">
+                            <div class="driver-area">
+                                <img src="../assets/images/download (1).png" alt="Driver">
+                            </div>
+
+                            <div class="seats-layout">
+                                <!-- Left Column -->
+                                <div class="seat-column">
+                                    <?php
+                                    for ($i = 1; $i <= $route['total_seats'] / 2; $i += 2) {
+                                        $seat_status_1 = $seats[$i] ?? 'available';
+                                        $seat_status_2 = $seats[$i + 1] ?? 'available';
+
+                                        echo "<div class='seat-row'>
+                                        <div class='seat $seat_status_1' data-seat='$i'>$i</div>
+                                        <div class='seat $seat_status_2' data-seat='" . ($i + 1) . "'>" . ($i + 1) . "</div>
+                                      </div>";
+                                    }
+                                    ?>
+                                </div>
+
+                                <!-- Column Separator -->
+                                <div class="column-separator"></div>
+
+                                <!-- Right Column -->
+                                <div class="seat-column">
+                                    <?php
+                                    $start = ceil($route['total_seats'] / 2) + 1;
+                                    for ($i = $start; $i <= $route['total_seats']; $i += 2) {
+                                        $seat_status_1 = $seats[$i] ?? 'available';
+                                        $seat_status_2 = $seats[$i + 1] ?? 'available';
+
+                                        echo "<div class='seat-row'>
+                                        <div class='seat $seat_status_1' data-seat='$i'>$i</div>
+                                        <div class='seat $seat_status_2' data-seat='" . ($i + 1) . "'>" . ($i + 1) . "</div>
+                                      </div>";
+                                    }
+                                    ?>
+                                </div>
+                            </div>
+
+                            <div class="door-container">
+                                <div class="door">Door</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-success" id="confirmSeats">Confirm</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
+
+        <!-- Booking Form -->
         <form method="POST" id="seatForm">
-            <h5>Select Seats (Max: 5)</h5>
-            <div class="seat-map">
-                <?php
-                for ($i = 1; $i <= $route['total_seats']; $i++) {
-                    $seat_status = $seats[$i] ?? 'available';
-                    $seat_class = "seat $seat_status";
-                    echo "<div class='$seat_class' data-seat='$i'>$i</div>";
-                }
-                ?>
-            </div>
             <input type="hidden" name="selected_seats" id="selectedSeats">
-            <button type="submit" class="btn btn-primary mt-3">Confirm Booking</button>
+            <div class="text-center mt-4">
+                <button type="submit" class="btn btn-primary">Confirm Booking</button>
+            </div>
         </form>
     </div>
 
     <script>
         const maxSeats = 5;
-        document.querySelectorAll('.seat.available').forEach(seat => {
+        const selectedSeatsInput = document.getElementById('selectedSeats');
+        const confirmSeatsButton = document.getElementById('confirmSeats');
+
+        document.querySelectorAll('.seat').forEach(seat => {
             seat.addEventListener('click', () => {
-                const selectedSeats = Array.from(document.querySelectorAll('.seat.selected'));
-                if (selectedSeats.length < maxSeats || seat.classList.contains('selected')) {
-                    seat.classList.toggle('selected');
-                    const updatedSeats = Array.from(document.querySelectorAll('.seat.selected'))
-                        .map(s => s.getAttribute('data-seat'));
-                    document.getElementById('selectedSeats').value = updatedSeats.join(',');
-                } else {
-                    alert(`You can select up to ${maxSeats} seats only.`);
+                if (!seat.classList.contains('reserved')) {
+                    if (seat.classList.contains('selected')) {
+                        seat.classList.remove('selected');
+                    } else {
+                        const selectedSeats = document.querySelectorAll('.seat.selected');
+                        if (selectedSeats.length < maxSeats) {
+                            seat.classList.add('selected');
+                        } else {
+                            alert(`You can select up to ${maxSeats} seats only.`);
+                        }
+                    }
                 }
             });
         });
 
+        confirmSeatsButton.addEventListener('click', () => {
+            const selectedSeats = Array.from(document.querySelectorAll('.seat.selected'))
+                .map(seat => seat.getAttribute('data-seat'));
+            selectedSeatsInput.value = selectedSeats.join(',');
+            document.getElementById('seatModal').querySelector('.btn-close').click();
+        });
+
         document.getElementById('seatForm').addEventListener('submit', function(e) {
-            if (!document.getElementById('selectedSeats').value) {
+            if (!selectedSeatsInput.value) {
                 e.preventDefault();
                 alert('Please select at least one seat to proceed.');
             }

@@ -21,9 +21,10 @@ $limit = 5; // Number of bookings per page
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-$booking_query = "SELECT b.id, r.source, r.destination, r.departure_time, b.seats_booked, b.payment_status, b.created_at, b.route_id 
+$booking_query = "SELECT b.id, r.source, r.destination, r.departure_time, b.seats_booked, b.payment_status, b.created_at, b.route_id, bs.bus_name 
                   FROM bookings b
                   JOIN routes r ON b.route_id = r.id
+                  JOIN buses bs ON r.bus_id = bs.id
                   WHERE b.user_id = ?
                   ORDER BY b.created_at DESC
                   LIMIT ? OFFSET ?";
@@ -73,6 +74,8 @@ $total_pages = ceil($total_bookings / $limit);
                     <th>Departure Time</th>
                     <th>Seats Booked</th>
                     <th>Payment Status</th>
+                    <th>Bus Name</th>
+                    <th>User Phone</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -86,6 +89,8 @@ $total_pages = ceil($total_bookings / $limit);
                             <td><?= htmlspecialchars($booking['departure_time']) ?></td>
                             <td><?= htmlspecialchars($booking['seats_booked']) ?></td>
                             <td><?= htmlspecialchars($booking['payment_status']) ?></td>
+                            <td><?= htmlspecialchars($booking['bus_name']) ?></td>
+                            <td><?= htmlspecialchars($user['phone']) ?></td>
                             <td>
                                 <?php
                                 $booking_time = strtotime($booking['created_at']);
@@ -105,7 +110,7 @@ $total_pages = ceil($total_bookings / $limit);
                     <?php endwhile; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="7" class="text-center">No bookings found.</td>
+                        <td colspan="9" class="text-center">No bookings found.</td>
                     </tr>
                 <?php endif; ?>
             </tbody>

@@ -4,10 +4,14 @@ session_start();
 include("../includes/config.php");
 
 // Check if the user is logged in and is an admin
-// if (!isset($_SESSION['admin_id'])) {
-//     header("Location: admin_login.php");
-//     exit();
-// }
+if (!isset($_SESSION['admin_id'])) {
+    header("Location: admin_login.php");
+    exit();
+}
+// Disable caching
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
 
 // Fetch statistics
 $total_buses = $conn->query("SELECT COUNT(*) AS total FROM buses")->fetch_assoc()['total'];
@@ -17,6 +21,25 @@ $total_feedback = $conn->query("SELECT COUNT(*) AS total FROM feedback")->fetch_
 $total_revenue = $conn->query("SELECT SUM(payment_amount) AS total FROM payments WHERE payment_status = 'Completed'")->fetch_assoc()['total'] ?? 0;
 $pending_payments = $conn->query("SELECT COUNT(*) AS total FROM payments WHERE payment_status = 'Pending'")->fetch_assoc()['total'];
 $completed_bookings = $conn->query("SELECT COUNT(*) AS total FROM bookings")->fetch_assoc()['total'];
+
+// Fetch buses ready to depart
+$buses_ready_to_depart_query = "
+    SELECT 
+        b.bus_name, r.source, r.destination, r.departure_time 
+    FROM 
+        buses b 
+    JOIN 
+        routes r ON b.id = r.bus_id 
+    WHERE 
+        r.departure_time >= NOW() AND r.departure_time <= DATE_ADD(NOW(), INTERVAL 2 HOUR)
+";
+$buses_ready_to_depart_result = $conn->query($buses_ready_to_depart_query);
+$buses_ready_to_depart = [];
+if ($buses_ready_to_depart_result->num_rows > 0) {
+    while ($row = $buses_ready_to_depart_result->fetch_assoc()) {
+        $buses_ready_to_depart[] = $row;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -79,34 +102,6 @@ $completed_bookings = $conn->query("SELECT COUNT(*) AS total FROM bookings")->fe
         .card-body a {
             text-decoration: none;
             color: inherit;
-        }
-
-        .bg-primary {
-            background-color: #007bff !important;
-        }
-
-        .bg-success {
-            background-color: #28a745 !important;
-        }
-
-        .bg-warning {
-            background-color: #ffc107 !important;
-        }
-
-        .bg-danger {
-            background-color: #dc3545 !important;
-        }
-
-        .bg-dark {
-            background-color: #343a40 !important;
-        }
-
-        .bg-info {
-            background-color: #17a2b8 !important;
-        }
-
-        .bg-secondary {
-            background-color: #6c757d !important;
         }
     </style>
 </head>
@@ -182,6 +177,27 @@ $completed_bookings = $conn->query("SELECT COUNT(*) AS total FROM bookings")->fe
                     </div>
                 </a>
             </div>
+            <div class="col-md-4 mb-3">
+                <a href="buses_ready.php" class="card text-white bg-primary">
+                    <div class="card-body">
+                        <h5>Buses Ready to Depart</h5>
+                        <?php if (count($buses_ready_to_depart) > 0): ?>
+                            <ul class="list-unstyled">
+                                <?php foreach ($buses_ready_to_depart as $bus): ?>
+                                    <li>
+                                        <strong><?= htmlspecialchars($bus['bus_name']) ?></strong>
+                                        (<?= htmlspecialchars($bus['source']) ?> → <?= htmlspecialchars($bus['destination']) ?> at <?= htmlspecialchars($bus['departure_time']) ?>)
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php else: ?>
+                            <p>No buses ready to depart within the next 2 hours.</p>
+                        <?php endif; ?>
+                    </div>
+                </a>
+            </div>
+
+
         </div>
     </div>
 </body>

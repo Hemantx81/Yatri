@@ -1,7 +1,7 @@
 <?php
 session_start();
 include('../includes/config.php');
-require_once('../vendor/autoload.php');  // Include TCPDF
+require("../fpdf/fpdf.php");
 
 // Check if booking_id is set
 if (!isset($_GET['booking_id'])) {

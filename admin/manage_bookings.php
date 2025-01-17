@@ -15,7 +15,7 @@ $filter = isset($_GET['filter']) ? trim($_GET['filter']) : '';
 // Build query dynamically based on search and filter
 $whereClause = "1=1"; // Default clause
 if (!empty($search)) {
-    $whereClause .= " AND (users.name LIKE '%$search%' OR routes.source LIKE '%$search%' OR routes.destination LIKE '%$search%')";
+    $whereClause .= " AND (users.name LIKE '%$search%' OR users.email LIKE '%$search%' OR routes.source LIKE '%$search%' OR routes.destination LIKE '%$search%')";
 }
 if (!empty($filter)) {
     $whereClause .= " AND bookings.payment_status = '$filter'";
@@ -31,8 +31,8 @@ $totalBookingsResult = $conn->query($totalBookingsQuery);
 $totalBookings = $totalBookingsResult->fetch_assoc()['total'];
 
 // Fetch bookings with pagination
-$bookingsQuery = "SELECT bookings.id, users.name AS user_name, routes.source, routes.destination, bookings.seats_booked, 
-                         bookings.payment_status, bookings.created_at 
+$bookingsQuery = "SELECT bookings.id, users.name AS user_name, users.email AS user_email, 
+                         routes.source, routes.destination, bookings.seats_booked, bookings.payment_status, bookings.created_at 
                   FROM bookings 
                   INNER JOIN users ON bookings.user_id = users.id 
                   INNER JOIN routes ON bookings.route_id = routes.id
@@ -79,6 +79,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['booking_id'])) {
 }
 ?>
 
+
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -106,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['booking_id'])) {
 
         <!-- Search and Filter -->
         <form method="GET" class="d-flex mb-3">
-            <input type="text" name="search" class="form-control me-2" placeholder="Search by user, source, or destination" value="<?= htmlspecialchars($search) ?>">
+            <input type="text" name="search" class="form-control me-2" placeholder="Search by user, email, source, destination" value="<?= htmlspecialchars($search) ?>">
             <select name="filter" class="form-select me-2">
                 <option value="">All Status</option>
                 <option value="Pending" <?= $filter === 'Pending' ? 'selected' : '' ?>>Pending</option>
@@ -122,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['booking_id'])) {
                 <tr>
                     <th>#</th>
                     <th>User</th>
+                    <th>Email</th>
                     <th>Source</th>
                     <th>Destination</th>
                     <th>Seats</th>
@@ -130,12 +133,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['booking_id'])) {
                     <th>Actions</th>
                 </tr>
             </thead>
+
             <tbody>
                 <?php if ($bookingsResult->num_rows > 0): ?>
                     <?php while ($booking = $bookingsResult->fetch_assoc()): ?>
                         <tr>
                             <td><?= htmlspecialchars($booking['id']) ?></td>
                             <td><?= htmlspecialchars($booking['user_name']) ?></td>
+                            <td><?= htmlspecialchars($booking['user_email']) ?></td>
                             <td><?= htmlspecialchars($booking['source']) ?></td>
                             <td><?= htmlspecialchars($booking['destination']) ?></td>
                             <td><?= htmlspecialchars($booking['seats_booked']) ?></td>
@@ -155,10 +160,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['booking_id'])) {
                     <?php endwhile; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="8" class="text-center">No bookings found</td>
+                        <td colspan="9" class="text-center">No bookings found</td>
                     </tr>
                 <?php endif; ?>
             </tbody>
+
         </table>
 
         <!-- Pagination -->

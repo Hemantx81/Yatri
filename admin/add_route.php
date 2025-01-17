@@ -20,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $price = trim($_POST['price']);
 
     // Validate input
+    $current_date = date('Y-m-d\TH:i');
     if (
         empty($bus_id) || empty($source) || empty($destination) ||
         empty($departure_time) || empty($arrival_time) || empty($price)
@@ -27,8 +28,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error_message = "All fields are required.";
     } elseif (!is_numeric($price) || $price <= 0) {
         $error_message = "Please enter a valid price.";
-    } elseif (strtotime($arrival_time) >= strtotime($departure_time)) {
-        $error_message = "Arrival time must be earlier than departure time.";
+    } elseif (strtotime($departure_time) < strtotime($current_date)) {
+        $error_message = "Departure time must be greater than or equal to today's date.";
+    } elseif (strtotime($arrival_time) <= strtotime($departure_time)) {
+        $error_message = "Arrival time must be greater than departure time.";
+    } elseif (strtotime($arrival_time) < strtotime($current_date)) {
+        $error_message = "Arrival time must be greater than today's date.";
     } else {
         // Insert route into database
         $query = "INSERT INTO routes (bus_id, source, destination, departure_time, arrival_time, price) 
@@ -40,14 +45,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Get the last inserted route_id (this is the generated ID for the new route)
             $route_id = $stmt->insert_id;
 
-            // Call generate_seats.php to handle seat creation and availability
+            // Store success message in session
+            $_SESSION['success_message'] = "Route added successfully!";
+
+            // Redirect to avoid form resubmission and call generate_seats.php
             $generate_seats_url = "generate_seats.php?bus_id=$bus_id&route_id=$route_id";
-            header("Location: $generate_seats_url"); // Redirect to generate seats script
+            header("Location: $generate_seats_url");
             exit;
         } else {
             $error_message = "Failed to add route. Please try again.";
         }
     }
+}
+
+// Display success message from session if available
+if (isset($_SESSION['success_message'])) {
+    $success_message = $_SESSION['success_message'];
+    unset($_SESSION['success_message']); // Clear message after displaying
 }
 ?>
 
@@ -138,6 +152,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="datetime-local" id="arrival_time" name="arrival_time" class="form-control" required>
             </div>
             <div class="mb-3">
+                <label for="duration" class="form-label">Duration (Hours)</label>
+                <input type="text" id="duration" name="duration" class="form-control" readonly>
+            </div>
+            <div class="mb-3">
                 <label for="price" class="form-label">Ticket Price</label>
                 <input type="number" id="price" name="price" class="form-control" required>
             </div>
@@ -149,6 +167,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <a href="manage_routes.php" class="btn btn-outline-secondary">Back to Manage Routes</a>
         </div>
     </div>
+
+    <script>
+        const departureInput = document.getElementById('departure_time');
+        const arrivalInput = document.getElementById('arrival_time');
+        const durationInput = document.getElementById('duration');
+
+        const calculateDuration = () => {
+            const departure = new Date(departureInput.value);
+            const arrival = new Date(arrivalInput.value);
+
+            if (arrival > departure) {
+                const diffInMs = arrival - departure;
+                const diffInHours = diffInMs / (1000 * 60 * 60);
+                durationInput.value = diffInHours.toFixed(2);
+            } else {
+                durationInput.value = '';
+            }
+        };
+
+        departureInput.addEventListener('change', calculateDuration);
+        arrivalInput.addEventListener('change', calculateDuration);
+    </script>
 </body>
 
 </html>

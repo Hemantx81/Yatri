@@ -10,14 +10,17 @@ $success = "";
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $name = mysqli_real_escape_string($conn, $_POST['name']);
     $email = mysqli_real_escape_string($conn, $_POST['email']);
+    $phone = mysqli_real_escape_string($conn, $_POST['phone']);
     $password = mysqli_real_escape_string($conn, $_POST['password']);
     $confirm_password = mysqli_real_escape_string($conn, $_POST['confirm_password']);
 
     // Validate form inputs
-    if (empty($name) || empty($email) || empty($password) || empty($confirm_password)) {
+    if (empty($name) || empty($email) || empty($phone) || empty($password) || empty($confirm_password)) {
         $error = "All fields are required.";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = "Invalid email address.";
+    } elseif (strlen($phone) != 10 || !preg_match("/^[0-9]{10}$/", $phone)) {
+        $error = "Phone number must be exactly 10 digits.";
     } elseif ($password !== $confirm_password) {
         $error = "Passwords do not match.";
     } else {
@@ -35,9 +38,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
             // Insert user into database
-            $insert_query = "INSERT INTO users (name, email, password) VALUES (?, ?, ?)";
+            $insert_query = "INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)";
             $stmt = $conn->prepare($insert_query);
-            $stmt->bind_param("sss", $name, $email, $hashed_password);
+            $stmt->bind_param("ssss", $name, $email, $phone, $hashed_password);
 
             if ($stmt->execute()) {
                 $success = "Registration successful! You can now log in.";
@@ -75,6 +78,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
             <div class="form-group">
                 <input type="email" name="email" id="email" class="form-control" placeholder="Email" required>
+            </div>
+            <div class="form-group">
+                <input type="text" name="phone" id="phone" class="form-control" placeholder="Phone Number" required>
             </div>
             <div class="form-group">
                 <input type="password" name="password" id="password" class="form-control" placeholder="Password" required>

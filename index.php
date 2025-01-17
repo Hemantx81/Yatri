@@ -11,30 +11,41 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $limit = 5;
 $offset = ($page - 1) * $limit;
 
-// Fetch available buses (filtered by search query if provided)
-$query = "SELECT r.id as route_id, b.bus_name, b.image_path, r.source, r.destination, r.price 
+// Current timestamp
+$current_time = date("Y-m-d H:i:s");
+
+// Fetch available buses (filtered by search query if provided and departure time not expired)
+$query = "SELECT r.id as route_id, b.bus_name, b.image_path, r.source, r.destination, r.price, r.departure_time 
           FROM routes r 
-          INNER JOIN buses b ON r.bus_id = b.id";
+          INNER JOIN buses b ON r.bus_id = b.id 
+          WHERE r.departure_time >= ?";
 if (!empty($search)) {
-    $query .= " WHERE b.bus_name LIKE ? OR r.source LIKE ? OR r.destination LIKE ?";
+    $query .= " AND (b.bus_name LIKE ? OR r.source LIKE ? OR r.destination LIKE ?)";
 }
 $query .= " ORDER BY r.departure_time ASC LIMIT 6";
 
 $stmt = $conn->prepare($query);
 if (!empty($search)) {
     $search_param = '%' . $search . '%';
-    $stmt->bind_param("sss", $search_param, $search_param, $search_param);
+    $stmt->bind_param("ssss", $current_time, $search_param, $search_param, $search_param);
+} else {
+    $stmt->bind_param("s", $current_time);
 }
 $stmt->execute();
 $result_available = $stmt->get_result();
 
-// Fetch recommended buses (top-rated)
-$query_recommended = "SELECT b.id as bus_id, b.bus_name, b.image_path, AVG(f.rating) as avg_rating 
+// Fetch recommended buses (top-rated and with future departure times)
+$query_recommended = "SELECT b.id as bus_id, b.bus_name, b.image_path, AVG(f.rating) as avg_rating, MIN(r.departure_time) as earliest_departure 
                       FROM feedback f 
                       INNER JOIN buses b ON f.bus_id = b.id 
+                      INNER JOIN routes r ON b.id = r.bus_id 
+                      WHERE r.departure_time >= ?
                       GROUP BY b.id 
-                      ORDER BY avg_rating DESC LIMIT 6";
-$result_recommended = $conn->query($query_recommended);
+                      ORDER BY avg_rating DESC, earliest_departure ASC LIMIT 6";
+$stmt_recommended = $conn->prepare($query_recommended);
+$stmt_recommended->bind_param("s", $current_time);
+$stmt_recommended->execute();
+$result_recommended = $stmt_recommended->get_result();
 
 // Fetch top feedback for display with pagination
 $query_feedback_paginated = "SELECT f.rating, f.comment, u.name, b.bus_name 
@@ -60,7 +71,7 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $user_id = $_SESSION['user_id'];
     $bus_id = $_POST['bus_id'];
 
-    // Handle feedback submission here
+    // Handle feedback submission
     $rating = $_POST['rating'];
     $comment = $_POST['comment'];
 
@@ -211,6 +222,7 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
             color: gold;
         }
     </style>
+
 </head>
 
 <?php include("includes/header.php") ?>
@@ -238,6 +250,7 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             <h4><?= htmlspecialchars($row['bus_name']) ?></h4>
                             <p>Route: <?= htmlspecialchars($row['source']) ?> - <?= htmlspecialchars($row['destination']) ?></p>
                             <p class="price">Price: NPR <?= htmlspecialchars($row['price']) ?></p>
+                            <p>Departure: <?= htmlspecialchars(date("d M Y, H:i", strtotime($row['departure_time']))) ?></p>
                             <a href="booking/book_ticket.php?route_id=<?= htmlspecialchars($row['route_id']) ?>" class="btn btn-primary">Book Now</a>
                         </div>
                     </div>
@@ -249,7 +262,7 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <!-- Recommended Buses Section -->
-    <div class="container my-5">
+    <!-- <div class="container my-5">
         <h2>Recommended Buses (Top Rated)</h2>
         <div class="row">
             <?php if ($result_recommended->num_rows > 0): ?>
@@ -258,6 +271,7 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="bus-item">
                             <img src="<?= htmlspecialchars($row['image_path']) ?>" alt="<?= htmlspecialchars($row['bus_name']) ?>">
                             <h4><?= htmlspecialchars($row['bus_name']) ?> (Rating: <?= number_format($row['avg_rating'], 2) ?>)</h4>
+                            <p>Next Departure: <?= htmlspecialchars(date("d M Y, H:i", strtotime($row['earliest_departure']))) ?></p>
                             <a href="booking/book_ticket.php?route_id=<?= htmlspecialchars($row['bus_id']) ?>" class="btn btn-primary">Book Now</a>
                         </div>
                     </div>
@@ -265,6 +279,12 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php else: ?>
                 <p class="text-center">No recommended buses found.</p>
             <?php endif; ?>
+        </div>
+    </div> -->
+    <div class="container my-5">
+        <h2>Recommended Buses (Top Rated)</h2>
+        <div class="row" id="recommended-buses">
+            <!-- Recommended buses will be dynamically added here -->
         </div>
     </div>
 
@@ -359,8 +379,76 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </div>
+
     <?php include("includes/footer.php") ?>
-    <!-- Bootstrap JS -->
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Fetch bus and feedback data
+            const response = await fetch('server.php');
+            const {
+                buses,
+                feedback
+            } = await response.json();
+
+            // Current time for filtering
+            const currentTime = new Date();
+
+            // Aggregate ratings for each bus
+            const busRatings = {};
+            feedback.forEach(({
+                bus_id,
+                rating
+            }) => {
+                if (!busRatings[bus_id]) {
+                    busRatings[bus_id] = {
+                        total: 0,
+                        count: 0
+                    };
+                }
+                busRatings[bus_id].total += parseFloat(rating);
+                busRatings[bus_id].count += 1;
+            });
+
+            // Calculate average ratings
+            buses.forEach(bus => {
+                const ratings = busRatings[bus.bus_id];
+                bus.avg_rating = ratings ? (ratings.total / ratings.count) : 0;
+            });
+
+            // Filter buses with future departure times
+            const futureBuses = buses.filter(bus => new Date(bus.departure_time) > currentTime);
+
+            // Sort buses by average rating (descending) and earliest departure time (ascending)
+            const sortedBuses = futureBuses.sort((a, b) => {
+                if (b.avg_rating !== a.avg_rating) {
+                    return b.avg_rating - a.avg_rating; // Higher rating first
+                }
+                return new Date(a.departure_time) - new Date(b.departure_time); // Earlier departure first
+            });
+
+            // Render recommended buses
+            const recommendedContainer = document.getElementById('recommended-buses');
+            if (sortedBuses.length === 0) {
+                recommendedContainer.innerHTML = '<p>No recommended buses found.</p>';
+            } else {
+                sortedBuses.forEach(bus => {
+                    recommendedContainer.innerHTML += `
+                        <div class="col-md-4">
+                            <div class="bus-item">
+                                <img src="${bus.image_path}" alt="${bus.bus_name}">
+                                <h4>${bus.bus_name} (Rating: ${bus.avg_rating.toFixed(2)})</h4>
+                                <p>Route: ${bus.source} - ${bus.destination}</p>
+                                <p>Price: NPR ${bus.price}</p>
+                                <p>Next Departure: ${new Date(bus.departure_time).toLocaleString()}</p>
+                                <a href="booking/book_ticket.php?route_id=${bus.bus_id}" class="btn btn-primary">Book Now</a>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+        });
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 

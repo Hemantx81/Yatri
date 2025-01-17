@@ -17,9 +17,9 @@ if (!isset($_GET['booking_id'])) {
 $booking_id = intval($_GET['booking_id']);
 $user_id = $_SESSION['user_id'];
 
-// Fetch booking details
+// Fetch booking details along with the user's phone number
 $query = "SELECT b.id AS booking_id, b.seats_booked, b.payment_status, r.source, r.destination, 
-                 r.departure_time, r.arrival_time, r.price, u.name AS user_name 
+                 r.departure_time, r.arrival_time, r.price, u.name AS user_name, u.phone AS user_phone
           FROM bookings b
           JOIN routes r ON b.route_id = r.id
           JOIN users u ON b.user_id = u.id
@@ -59,21 +59,25 @@ $pdf->SetFont('Arial', '', 12);
 
 // User Information
 $pdf->Cell(0, 10, 'Passenger Name: ' . htmlspecialchars($booking['user_name']), 0, 1);
+$pdf->Cell(0, 10, 'Phone Number: ' . htmlspecialchars($booking['user_phone']), 0, 1);  // Added phone number
 $pdf->Ln(5);
 
 // Booking Details
 $pdf->Cell(0, 10, 'Booking ID: ' . $booking['booking_id'], 0, 1);
 $pdf->Cell(0, 10, 'Source: ' . htmlspecialchars($booking['source']), 0, 1);
+$pdf->Cell(0, 10, 'Boarding Place: Bus Park, ' . htmlspecialchars($booking['source']), 0, 1);
 $pdf->Cell(0, 10, 'Destination: ' . htmlspecialchars($booking['destination']), 0, 1);
+$pdf->Cell(0, 10, 'Drop-Off Place: Bus Park, ' . htmlspecialchars($booking['destination']), 0, 1); // Added cell here
 $pdf->Cell(0, 10, 'Departure Time: ' . htmlspecialchars($booking['departure_time']), 0, 1);
 $pdf->Cell(0, 10, 'Arrival Time: ' . htmlspecialchars($booking['arrival_time']), 0, 1);
 $pdf->Cell(0, 10, 'Seats Booked: ' . $booking['seats_booked'], 0, 1);
-$pdf->Cell(0, 10, 'Total Price: NPR ' . number_format($booking['price'] * $booking['seats_booked'], 2), 0, 1);
+$pdf->Cell(0, 10, 'Price Per Seat: NPR ' . number_format($booking['price'], 2), 0, 1);
 $pdf->Cell(0, 10, 'Payment Status: ' . htmlspecialchars($booking['payment_status']), 0, 1);
 $pdf->Ln(10);
 
 // Thank You Note
 $pdf->SetFont('Arial', 'I', 12);
+$pdf->Cell(0, 10, 'This ticket is not refundable', 0, 1, 'C');
 $pdf->Cell(0, 10, 'Thank you for choosing our service!', 0, 1, 'C');
 
 // Output the PDF

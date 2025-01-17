@@ -1,99 +1,100 @@
 <?php
 session_start();
-include("includes/config.php"); // Database connection
+include("includes/config.php");
 
-// Check if user is logged in
+// Redirect if not logged in
 if (!isset($_SESSION['user_id'])) {
-    header("Location: login.php"); // Redirect to login page if not logged in
+    header("Location: login.php");
     exit();
 }
 
-// Initialize variables
+// Variables
 $buses = [];
 $recommended_buses = [];
-$error = '';
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$items_per_page = 5;
+$items_per_page = 3;
 $total_pages = 1;
 
-// Fuzzy Search Function (Levenshtein Distance)
-function fuzzy_search($string, $search)
-{
-    return levenshtein(strtolower($string), strtolower($search)) <= 3; // Allow up to 3 character differences
-}
+// Initialize filter variables
+$filter_price_min = isset($_GET['price_min']) ? (int)$_GET['price_min'] : 0;
+$filter_price_max = isset($_GET['price_max']) ? (int)$_GET['price_max'] : 10000;
+$filter_departure_time = isset($_GET['departure_time']) ? $_GET['departure_time'] : 'any';
+$filter_ac = isset($_GET['ac']) ? (int)$_GET['ac'] : null;
+$filter_wifi = isset($_GET['wifi']) ? (int)$_GET['wifi'] : null;
 
-// Check if the form was submitted
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $source = trim($_POST['source']);
-    $destination = trim($_POST['destination']);
-    $date = trim($_POST['date']);
+// Handle search
+if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_GET['search'])) {
+    $source = trim($_REQUEST['source'] ?? '');
+    $destination = trim($_REQUEST['destination'] ?? '');
+    $date = trim($_REQUEST['date'] ?? '');
     $current_date = date('Y-m-d');
 
-    if (!empty($source) && !empty($destination) && !empty($date)) {
-        if ($date >= $current_date) {
-            // Query to fetch buses by date along with seat availability
-            $query = $conn->prepare("
-                SELECT r.id AS route_id, b.id AS bus_id, b.bus_name, b.image_path, 
-                       r.price, r.departure_time, r.arrival_time, r.source, r.destination, 
-                       b.is_ac, b.is_wifi, COUNT(sa.seat_number) AS total_seats, 
-                       SUM(CASE WHEN sa.status = 'available' THEN 1 ELSE 0 END) AS available_seats
-                FROM buses b
-                JOIN routes r ON b.id = r.bus_id
-                LEFT JOIN seat_availability sa ON r.id = sa.route_id
-                WHERE DATE(r.departure_time) = ?
-                GROUP BY r.id, b.id
-            ");
-            $query->bind_param("s", $date);
-            $query->execute();
-            $result = $query->get_result();
+    if (!empty($source) && !empty($destination) && !empty($date) && $date >= $current_date) {
+        // Main query for buses
+        $query = "
+            SELECT r.id AS route_id, b.id AS bus_id, b.bus_name, b.image_path,
+                   b.is_ac, b.is_wifi, r.price,
+                   DATE_FORMAT(r.departure_time, '%h:%i %p') AS departure_time,
+                   DATE_FORMAT(r.arrival_time, '%h:%i %p') AS arrival_time,
+                   r.source, r.destination, COUNT(sa.seat_number) AS total_seats,
+                   SUM(CASE WHEN sa.status = 'available' THEN 1 ELSE 0 END) AS available_seats
+            FROM buses b
+            JOIN routes r ON b.id = r.bus_id
+            LEFT JOIN seat_availability sa ON r.id = sa.route_id
+            WHERE DATE(r.departure_time) = ? 
+            AND r.source LIKE ? 
+            AND r.destination LIKE ? 
+            AND r.price BETWEEN ? AND ? 
+        ";
 
-            if ($result->num_rows > 0) {
-                $all_buses = $result->fetch_all(MYSQLI_ASSOC);
-
-                // Filter results using fuzzy search
-                foreach ($all_buses as $bus) {
-                    if (fuzzy_search($bus['source'], $source) && fuzzy_search($bus['destination'], $destination)) {
-                        $buses[] = $bus;
-                    }
-                }
-
-                // Pagination logic
-                $total_pages = ceil(count($buses) / $items_per_page);
-                $buses = array_slice($buses, ($current_page - 1) * $items_per_page, $items_per_page);
-
-                // Fetch recommended buses (average rating >= 4.0)
-                $recommended_query = $conn->prepare("
-                    SELECT b.id AS bus_id, b.bus_name, b.image_path, r.id AS route_id, 
-                           r.price, r.departure_time, r.arrival_time, r.source, r.destination, 
-                           b.is_ac, b.is_wifi, AVG(f.rating) AS average_rating, 
-                           COUNT(sa.seat_number) AS total_seats, 
-                           SUM(CASE WHEN sa.status = 'available' THEN 1 ELSE 0 END) AS available_seats
-                    FROM buses b
-                    JOIN routes r ON b.id = r.bus_id
-                    LEFT JOIN feedback f ON b.id = f.bus_id
-                    LEFT JOIN seat_availability sa ON r.id = sa.route_id
-                    WHERE DATE(r.departure_time) = ?
-                    GROUP BY b.id, r.id
-                    HAVING average_rating >= 4.0
-                    ORDER BY average_rating DESC
-                ");
-                $recommended_query->bind_param("s", $date);
-                $recommended_query->execute();
-                $recommended_result = $recommended_query->get_result();
-                $all_recommended_buses = $recommended_result->fetch_all(MYSQLI_ASSOC);
-
-                // Filter recommended buses using fuzzy search
-                foreach ($all_recommended_buses as $bus) {
-                    if (fuzzy_search($bus['source'], $source) && fuzzy_search($bus['destination'], $destination)) {
-                        $recommended_buses[] = $bus;
-                    }
-                }
-            }
-        } else {
-            $error = "Please select a valid date (not earlier than today).";
+        if ($filter_departure_time !== 'any') {
+            $query .= " AND HOUR(r.departure_time) = ? ";
         }
+        if ($filter_ac !== null) {
+            $query .= " AND b.is_ac = ? ";
+        }
+        if ($filter_wifi !== null) {
+            $query .= " AND b.is_wifi = ? ";
+        }
+        $query .= " GROUP BY r.id ORDER BY r.departure_time ASC";
+
+        $stmt = $conn->prepare($query);
+        $source_param = "%" . $source . "%";
+        $destination_param = "%" . $destination . "%";
+
+        $params = [$date, $source_param, $destination_param, $filter_price_min, $filter_price_max];
+        if ($filter_departure_time !== 'any') $params[] = $filter_departure_time;
+        if ($filter_ac !== null) $params[] = $filter_ac;
+        if ($filter_wifi !== null) $params[] = $filter_wifi;
+
+        $stmt->bind_param(str_repeat('s', count($params)), ...$params);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        $all_buses = $result->fetch_all(MYSQLI_ASSOC);
+        $total_pages = ceil(count($all_buses) / $items_per_page);
+        $buses = array_slice($all_buses, ($current_page - 1) * $items_per_page, $items_per_page);
+
+        // Recommended buses based on feedback
+        $recommended_query = "
+            SELECT r.id AS route_id, b.id AS bus_id, b.bus_name, b.image_path, b.is_ac, b.is_wifi,
+                   AVG(f.rating) AS avg_rating, r.price,
+                   DATE_FORMAT(r.departure_time, '%h:%i %p') AS departure_time,
+                   DATE_FORMAT(r.arrival_time, '%h:%i %p') AS arrival_time,
+                   r.source, r.destination
+            FROM feedback f
+            JOIN routes r ON f.bus_id = r.bus_id
+            JOIN buses b ON r.bus_id = b.id
+            WHERE r.source LIKE ? AND r.destination LIKE ? 
+            GROUP BY r.id
+            ORDER BY avg_rating DESC LIMIT 3
+        ";
+        $stmt_recommended = $conn->prepare($recommended_query);
+        $stmt_recommended->bind_param('ss', $source_param, $destination_param);
+        $stmt_recommended->execute();
+        $recommended_buses = $stmt_recommended->get_result()->fetch_all(MYSQLI_ASSOC);
     } else {
-        $error = "Please fill out all fields.";
+        $error_message = "Travel date must be today or later.";
     }
 }
 ?>
@@ -104,241 +105,144 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>Search Buses</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.0/jquery-ui.min.js"></script>
+    <link href="https://code.jquery.com/ui/1.13.0/themes/base/jquery-ui.css" rel="stylesheet">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(to bottom, #4caf50, #f8f9fa);
-            min-height: 100vh;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .search-container {
-            margin: 50px auto;
-            max-width: 600px;
-            background-color: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-        }
-
-        .bus-list {
-            margin-top: 20px;
-        }
-
         .bus-item {
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
             margin-bottom: 15px;
-            padding: 20px;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            background-color: #f9f9f9;
         }
 
-        .bus-item:hover {
-            transform: scale(1.02);
-            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
-        }
-
-        .bus-item img {
-            max-width: 100%;
-            border-radius: 5px;
-            margin-bottom: 15px;
-        }
-
-        .bus-item h5 {
-            margin: 0;
-            color: #4caf50;
-        }
-
-        .tabs .nav-link {
-            color: white;
-            background-color: #4caf50;
-            border: none;
-            transition: background-color 0.2s ease;
-        }
-
-        .tabs .nav-link:hover {
-            background-color: #45a045;
-        }
-
-        .tabs .nav-link.active {
-            background-color: darkgreen;
-        }
-
-        .pagination {
-            margin-top: 20px;
-            justify-content: center;
-        }
-
-        .no-buses-message {
+        .no-buses {
             text-align: center;
-            font-size: 1.2em;
-            color: #dc3545;
+            font-size: 1.2rem;
+            color: #888;
             margin-top: 20px;
         }
 
-        .features {
-            margin-top: 10px;
-        }
-
-        .feature-badge {
-            margin-right: 5px;
-        }
-
-        footer {
-            margin-top: auto;
-            padding: 20px;
-            background-color: #4caf50;
+        .footer {
+            background: #004d99;
             color: white;
             text-align: center;
+            padding: 10px 0;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
         }
     </style>
+    <script>
+        $(function() {
+            const availablePlaces = ["Kathmandu", "Pokhara", "Chitwan", "Lumbini", "Biratnagar", "Nepalgunj"];
+            $("#source, #destination").autocomplete({
+                source: availablePlaces
+            });
+        });
+    </script>
 </head>
 
 <body>
-    <?php include("includes/header.php") ?>
-    <div class="container">
-        <div class="search-container">
-            <h2 class="text-center">Search Buses</h2>
-            <form method="POST" class="mt-4">
-                <div class="mb-3">
-                    <label for="source" class="form-label">Source</label>
-                    <input type="text" class="form-control" id="source" name="source" placeholder="Enter source">
+    <?php include("includes/header.php"); ?>
+    <div class="container mt-4">
+        <h2>Search Buses</h2>
+        <form method="POST">
+            <div class="row">
+                <div class="col-md-4">
+                    <input type="text" id="source" name="source" class="form-control" placeholder="Source" required>
                 </div>
-                <div class="mb-3">
-                    <label for="destination" class="form-label">Destination</label>
-                    <input type="text" class="form-control" id="destination" name="destination" placeholder="Enter destination">
+                <div class="col-md-4">
+                    <input type="text" id="destination" name="destination" class="form-control" placeholder="Destination" required>
                 </div>
-                <div class="mb-3">
-                    <label for="date" class="form-label">Date</label>
-                    <input type="date" class="form-control" id="date" name="date" min="<?php echo date('Y-m-d'); ?>">
+                <div class="col-md-4">
+                    <input type="date" id="date" name="date" class="form-control" required>
                 </div>
-                <button type="submit" class="btn btn-primary w-100">Search</button>
-            </form>
+            </div>
+            <button type="submit" class="btn btn-primary mt-3">Search</button>
+        </form>
+
+        <?php if (isset($error_message)): ?>
+            <div class="alert alert-danger mt-3"><?= htmlspecialchars($error_message) ?></div>
+        <?php endif; ?>
+
+        <!-- Filters -->
+        <form method="GET" class="mb-4">
+            <div class="row">
+                <div class="col-md-3">
+                    <label for="price_min" class="form-label">Min Price</label>
+                    <input type="number" id="price_min" name="price_min" class="form-control" min="0" value="<?= $filter_price_min ?>">
+                </div>
+                <div class="col-md-3">
+                    <label for="price_max" class="form-label">Max Price</label>
+                    <input type="number" id="price_max" name="price_max" class="form-control" min="0" value="<?= $filter_price_max ?>">
+                </div>
+                <div class="col-md-3">
+                    <label for="departure_time" class="form-label">Departure Time</label>
+                    <select id="departure_time" name="departure_time" class="form-control">
+                        <option value="any" <?= $filter_departure_time == 'any' ? 'selected' : '' ?>>Any</option>
+                        <?php for ($i = 0; $i < 24; $i++): ?>
+                            <option value="<?= $i ?>" <?= $filter_departure_time == $i ? 'selected' : '' ?>><?= sprintf('%02d:00', $i) ?></option>
+                        <?php endfor; ?>
+                    </select>
+                </div>
+            </div>
+
+            <!-- AC and Wi-Fi Filters -->
+            <div class="row mt-3">
+                <div class="col-md-3">
+                    <label for="is_ac" class="form-label">AC</label>
+                    <input type="checkbox" id="is_ac" name="is_ac" value="1" <?= $filter_ac ? 'checked' : '' ?>>
+                </div>
+                <div class="col-md-3">
+                    <label for="is_wifi" class="form-label">Wi-Fi</label>
+                    <input type="checkbox" id="is_wifi" name="is_wifi" value="1" <?= $filter_wifi ? 'checked' : '' ?>>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-secondary mt-3">Apply Filters</button>
+        </form>
+
+
+        <!-- Bus Results -->
+        <div class="mt-4">
+            <?php if (!empty($buses)): ?>
+                <?php foreach ($buses as $bus): ?>
+                    <div class="bus-item">
+                        <h5><?= htmlspecialchars($bus['bus_name']) ?></h5>
+                        <p>Route: <?= htmlspecialchars($bus['source']) ?> to <?= htmlspecialchars($bus['destination']) ?></p>
+                        <p>Departure: <?= htmlspecialchars($bus['departure_time']) ?> | Arrival: <?= htmlspecialchars($bus['arrival_time']) ?></p>
+                        <p>Price: <?= htmlspecialchars($bus['price']) ?> NPR</p>
+                        <p>AC: <?= $bus['is_ac'] ? 'Yes' : 'No' ?> | Wi-Fi: <?= $bus['is_wifi'] ? 'Yes' : 'No' ?></p>
+                        <p>Available Seats: <?= htmlspecialchars($bus['available_seats']) ?></p>
+                        <a href="booking/book_ticket.php?route_id=<?php echo $bus['route_id']; ?>" class="btn btn-success">Book Now</a>
+                    </div>
+                <?php endforeach; ?>
+            <?php elseif ($_SERVER['REQUEST_METHOD'] === 'POST'): ?>
+                <div class="no-buses">No buses found for the selected criteria.</div>
+            <?php endif; ?>
         </div>
 
-        <?php if ($_SERVER['REQUEST_METHOD'] === 'POST'): ?>
-            <div class="tabs">
-                <ul class="nav nav-tabs" id="busTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="all-buses-tab" data-bs-toggle="tab" data-bs-target="#all-buses" type="button" role="tab" aria-controls="all-buses" aria-selected="true">All Buses</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="recommended-buses-tab" data-bs-toggle="tab" data-bs-target="#recommended-buses" type="button" role="tab" aria-controls="recommended-buses" aria-selected="false">Recommended Buses</button>
-                    </li>
-                </ul>
-                <div class="tab-content mt-3" id="busTabsContent">
-                    <!-- All Buses Tab -->
-                    <div class="tab-pane fade show active" id="all-buses" role="tabpanel" aria-labelledby="all-buses-tab">
-                        <div class="bus-list">
-                            <?php if (!empty($buses)): ?>
-                                <?php foreach ($buses as $bus): ?>
-                                    <div class="bus-item">
-                                        <div class="row">
-                                            <div class="col-md-4">
-                                                <img src="<?php echo $bus['image_path']; ?>" alt="<?php echo $bus['bus_name']; ?>" class="img-fluid">
-                                            </div>
-                                            <div class="col-md-8">
-                                                <h5><?php echo $bus['bus_name']; ?></h5>
-                                                <p><strong>Route:</strong> <?php echo $bus['source'] . ' to ' . $bus['destination']; ?></p>
-                                                <p><strong>Departure Time:</strong> <?php echo date('H:i', strtotime($bus['departure_time'])); ?></p>
-                                                <p><strong>Arrival Time:</strong> <?php echo date('H:i', strtotime($bus['arrival_time'])); ?></p>
-                                                <p><strong>Price:</strong> Rs. <?php echo $bus['price']; ?></p>
-                                                <p><strong>Total Seats:</strong> <?php echo $bus['total_seats']; ?> | <strong>Available Seats:</strong> <?php echo $bus['available_seats']; ?></p>
-                                                <div class="features">
-                                                    <!-- For AC feature -->
-                                                    <?php if ($bus['is_ac'] == 1) {
-                                                        echo '<span class="badge bg-success feature-badge">AC</span>';
-                                                    } else {
-                                                        echo '<span class="badge bg-secondary feature-badge">AC: Not Available</span>';
-                                                    } ?>
-
-                                                    <!-- For Wi-Fi feature -->
-                                                    <?php if ($bus['is_wifi'] == 1) {
-                                                        echo '<span class="badge bg-info feature-badge">Wi-Fi</span>';
-                                                    } else {
-                                                        echo '<span class="badge bg-secondary feature-badge">Wi-Fi: Not Available</span>';
-                                                    } ?>
-                                                </div>
-                                                <a href="booking/book_ticket.php?bus_id=<?php echo $bus['bus_id']; ?>&route_id=<?php echo $bus['route_id']; ?>" class="btn btn-success mt-2">Book Now</a>
-                                            </div>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <div class="no-buses-message">No buses available for the selected search criteria.</div>
-                            <?php endif; ?>
-                        </div>
-                        <!-- Pagination -->
-                        <div class="pagination">
-                            <ul class="pagination">
-                                <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                                    <li class="page-item <?php if ($i == $current_page) echo 'active'; ?>">
-                                        <a class="page-link" href="?page=<?php echo $i; ?>&source=<?php echo $source; ?>&destination=<?php echo $destination; ?>&date=<?php echo $date; ?>"><?php echo $i; ?></a>
-                                    </li>
-                                <?php endfor; ?>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <!-- Recommended Buses Tab -->
-                    <div class="tab-pane fade" id="recommended-buses" role="tabpanel" aria-labelledby="recommended-buses-tab">
-                        <div class="bus-list">
-                            <?php if (!empty($recommended_buses)): ?>
-                                <?php foreach ($recommended_buses as $bus): ?>
-                                    <div class="bus-item">
-                                        <div class="row">
-                                            <div class="col-md-4">
-                                                <img src="<?php echo $bus['image_path']; ?>" alt="<?php echo $bus['bus_name']; ?>" class="img-fluid">
-                                            </div>
-                                            <div class="col-md-8">
-                                                <h5><?php echo $bus['bus_name']; ?></h5>
-                                                <p><strong>Route:</strong> <?php echo $bus['source'] . ' to ' . $bus['destination']; ?></p>
-                                                <p><strong>Departure Time:</strong> <?php echo date('H:i', strtotime($bus['departure_time'])); ?></p>
-                                                <p><strong>Arrival Time:</strong> <?php echo date('H:i', strtotime($bus['arrival_time'])); ?></p>
-                                                <p><strong>Price:</strong> Rs. <?php echo $bus['price']; ?></p>
-                                                <p><strong>Total Seats:</strong> <?php echo $bus['total_seats']; ?> | <strong>Available Seats:</strong> <?php echo $bus['available_seats']; ?></p>
-                                                <div class="features">
-                                                    <!-- For AC feature -->
-                                                    <?php if ($bus['is_ac'] == 1) {
-                                                        echo '<span class="badge bg-success feature-badge">AC</span>';
-                                                    } else {
-                                                        echo '<span class="badge bg-secondary feature-badge">AC: Not Available</span>';
-                                                    } ?>
-
-                                                    <!-- For Wi-Fi feature -->
-                                                    <?php if ($bus['is_wifi'] == 1) {
-                                                        echo '<span class="badge bg-info feature-badge">Wi-Fi</span>';
-                                                    } else {
-                                                        echo '<span class="badge bg-secondary feature-badge">Wi-Fi: Not Available</span>';
-                                                    } ?>
-                                                </div>
-                                                <a href="booking/book_ticket.php?bus_id=<?php echo $bus['bus_id']; ?>&route_id=<?php echo $bus['route_id']; ?>" class="btn btn-success mt-2">Book Now</a>
-                                            </div>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <div class="no-buses-message">No recommended buses available for the selected search criteria.</div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
+        <!-- Pagination -->
+        <?php if (count($buses) > 0 && $total_pages > 1): ?>
+            <div class="mt-4 text-center">
+                <nav>
+                    <ul class="pagination">
+                        <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                            <li class="page-item <?= $current_page == $i ? 'active' : '' ?>">
+                                <a class="page-link" href="?page=<?= $i ?>&source=<?= $source ?>&destination=<?= $destination ?>&date=<?= $date ?>&price_min=<?= $filter_price_min ?>&price_max=<?= $filter_price_max ?>&departure_time=<?= $filter_departure_time ?>&ac=<?= $filter_ac ?>&wifi=<?= $filter_wifi ?>"><?= $i ?></a>
+                            </li>
+                        <?php endfor; ?>
+                    </ul>
+                </nav>
             </div>
         <?php endif; ?>
     </div>
 
-    <footer>
-        <p>&copy; 2024 Yatri Online Bus Ticket Reservation System</p>
-    </footer>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <?php include("includes/footer.php"); ?>
 </body>
 
 </html>

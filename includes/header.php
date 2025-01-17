@@ -162,7 +162,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
     </nav>
     <div class="nav-container"></div>
 
-    <!-- Your main content here -->
+
 </body>
 
 </html>

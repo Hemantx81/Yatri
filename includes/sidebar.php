@@ -102,7 +102,7 @@
                 </a>
             </li>
             <li>
-                <a href="add_bus.php" class="nav-link text-white">
+                <a href="view_buses.php" class="nav-link text-white">
                     <i class="fas fa-bus me-2"></i> Manage Buses
                 </a>
             </li>
