@@ -221,6 +221,19 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
         .star-rating label:hover~label {
             color: gold;
         }
+
+        .top-routes-item {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .top-routes-item:hover {
+            transform: scale(1.05);
+        }
     </style>
 
 </head>
@@ -261,26 +274,7 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- Recommended Buses Section -->
-    <!-- <div class="container my-5">
-        <h2>Recommended Buses (Top Rated)</h2>
-        <div class="row">
-            <?php if ($result_recommended->num_rows > 0): ?>
-                <?php while ($row = $result_recommended->fetch_assoc()): ?>
-                    <div class="col-md-4">
-                        <div class="bus-item">
-                            <img src="<?= htmlspecialchars($row['image_path']) ?>" alt="<?= htmlspecialchars($row['bus_name']) ?>">
-                            <h4><?= htmlspecialchars($row['bus_name']) ?> (Rating: <?= number_format($row['avg_rating'], 2) ?>)</h4>
-                            <p>Next Departure: <?= htmlspecialchars(date("d M Y, H:i", strtotime($row['earliest_departure']))) ?></p>
-                            <a href="booking/book_ticket.php?route_id=<?= htmlspecialchars($row['bus_id']) ?>" class="btn btn-primary">Book Now</a>
-                        </div>
-                    </div>
-                <?php endwhile; ?>
-            <?php else: ?>
-                <p class="text-center">No recommended buses found.</p>
-            <?php endif; ?>
-        </div>
-    </div> -->
+
     <div class="container my-5">
         <h2>Recommended Buses (Top Rated)</h2>
         <div class="row" id="recommended-buses">
@@ -379,6 +373,30 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </div>
+    <!-- Top Routes Section -->
+    <div class="container my-5">
+        <h2>Top Routes</h2>
+        <div class="row">
+            <?php
+            $query_top_routes = "SELECT source, destination FROM routes r
+                                 INNER JOIN bookings b ON r.id = b.route_id
+                                 GROUP BY r.source, r.destination
+                                 ORDER BY COUNT(*) DESC LIMIT 6";
+            $result_top_routes = $conn->query($query_top_routes);
+            ?>
+            <?php if ($result_top_routes->num_rows > 0): ?>
+                <?php while ($route = $result_top_routes->fetch_assoc()): ?>
+                    <div class="col-md-4">
+                        <div class="top-routes-item">
+                            <h4><?= htmlspecialchars($route['source']) ?> → <?= htmlspecialchars($route['destination']) ?></h4>
+                        </div>
+                    </div>
+                <?php endwhile; ?>
+            <?php else: ?>
+                <p>No popular routes found.</p>
+            <?php endif; ?>
+        </div>
+    </div>
 
     <?php include("includes/footer.php") ?>
 
@@ -390,9 +408,6 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 buses,
                 feedback
             } = await response.json();
-
-            // Current time for filtering
-            const currentTime = new Date();
 
             // Aggregate ratings for each bus
             const busRatings = {};
@@ -410,22 +425,17 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 busRatings[bus_id].count += 1;
             });
 
-            // Calculate average ratings
-            buses.forEach(bus => {
-                const ratings = busRatings[bus.bus_id];
-                bus.avg_rating = ratings ? (ratings.total / ratings.count) : 0;
-            });
+            // Filter buses with ratings and availability
+            const ratedAvailableBuses = buses
+                .filter(bus => busRatings[bus.bus_id] && bus.availability === 'available')
+                .map(bus => {
+                    const ratings = busRatings[bus.bus_id];
+                    bus.avg_rating = ratings.total / ratings.count;
+                    return bus;
+                });
 
-            // Filter buses with future departure times
-            const futureBuses = buses.filter(bus => new Date(bus.departure_time) > currentTime);
-
-            // Sort buses by average rating (descending) and earliest departure time (ascending)
-            const sortedBuses = futureBuses.sort((a, b) => {
-                if (b.avg_rating !== a.avg_rating) {
-                    return b.avg_rating - a.avg_rating; // Higher rating first
-                }
-                return new Date(a.departure_time) - new Date(b.departure_time); // Earlier departure first
-            });
+            // Sort buses by average rating (descending)
+            const sortedBuses = ratedAvailableBuses.sort((a, b) => b.avg_rating - a.avg_rating);
 
             // Render recommended buses
             const recommendedContainer = document.getElementById('recommended-buses');
