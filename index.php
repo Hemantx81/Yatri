@@ -98,7 +98,7 @@ if ($is_logged_in && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         .hero {
-            background: url('assets/images/hero.jpg') no-repeat center center / cover;
+            background: url('assets/images/busstop.jpg') no-repeat center center / cover;
             height: 100vh;
             display: flex;
             flex-direction: column;

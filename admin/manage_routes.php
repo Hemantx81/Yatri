@@ -251,32 +251,45 @@ $totalPages = ceil($totalRoutes / $perPage);
                 });
         });
 
-        // Delete route
+
+        // Handle Delete Button Action
         document.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const routeId = e.target.getAttribute('data-route_id');
-                if (confirm('Are you sure you want to delete this route?')) {
-                    fetch('route_actions.php', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                            },
-                            body: new URLSearchParams({
-                                action: 'delete',
-                                route_id: routeId,
-                            }),
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            alert(data.message);
-                            if (data.message === 'Route deleted successfully.') {
-                                document.getElementById('route_id' + routeId).remove();
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            alert('Error deleting route.');
-                        });
+                const row = document.getElementById('route_' + routeId);
+                const departureTime = row.getAttribute('data-departure_time');
+                const currentTime = new Date().getTime();
+
+                if (new Date(departureTime).getTime() < currentTime) {
+                    // Mark route as inactive visually
+                    row.classList.add('inactive');
+                    row.querySelector('.delete-btn').disabled = true;
+                    row.querySelector('.edit-btn').disabled = true;
+                    alert('This route is inactive because the departure time has passed.');
+                } else {
+                    if (confirm('Are you sure you want to delete this route? This will also delete associated seat availability records.')) {
+                        fetch('route_actions.php', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded',
+                                },
+                                body: new URLSearchParams({
+                                    action: 'delete',
+                                    route_id: routeId,
+                                }),
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                alert(data.message);
+                                if (data.message === 'Route and associated seat availability deleted successfully.') {
+                                    row.remove();
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error:', error);
+                                alert('Error deleting route.');
+                            });
+                    }
                 }
             });
         });

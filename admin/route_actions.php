@@ -1,38 +1,42 @@
 <?php
 include('../includes/config.php');
 
-header('Content-Type: application/json');
-
-$response = [];
-
-// DELETE Route (with foreign key action set to NULL or DEFAULT)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+    $action = $_POST['action'];
+    $routeId = $_POST['route_id'];
 
-    // DELETE Route
     if ($action === 'delete') {
-        $routeId = $_POST['route_id'] ?? null;
+        // Ensure the route is not already inactive before deletion
+        $query = "SELECT departure_time FROM routes WHERE id = ?";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("i", $routeId);
+        $stmt->execute();
+        $result = $stmt->get_result()->fetch_assoc();
 
-        if ($routeId) {
-            $deleteQuery = "DELETE FROM routes WHERE id = ?";
-            $stmt = $conn->prepare($deleteQuery);
-            $stmt->bind_param("i", $routeId);
-
-            if ($stmt->execute()) {
-                if ($stmt->affected_rows > 0) {
-                    $response['message'] = 'Route deleted successfully.';
-                } else {
-                    $response['message'] = 'No route found with the provided ID.';
-                }
-            } else {
-                $response['message'] = 'Error deleting route: ' . $stmt->error;
+        if ($result) {
+            $departureTime = $result['departure_time'];
+            if (strtotime($departureTime) < time()) {
+                echo json_encode(['message' => 'This route is already inactive.']);
+                exit;
             }
+
+            // Proceed with deleting the route and associated seat availability
+            $deleteQuery = "DELETE FROM seat_availability WHERE route_id = ?";
+            $deleteStmt = $conn->prepare($deleteQuery);
+            $deleteStmt->bind_param("i", $routeId);
+            $deleteStmt->execute();
+
+            $routeDeleteQuery = "DELETE FROM routes WHERE id = ?";
+            $routeDeleteStmt = $conn->prepare($routeDeleteQuery);
+            $routeDeleteStmt->bind_param("i", $routeId);
+            $routeDeleteStmt->execute();
+
+            echo json_encode(['message' => 'Route and associated seat availability deleted successfully.']);
         } else {
-            $response['message'] = 'Error: route_id is required.';
+            echo json_encode(['message' => 'Route not found.']);
         }
     }
 }
-
 // Return the response as JSON
 echo json_encode($response);
 
