@@ -1,44 +1,21 @@
 <?php
 include('../includes/config.php');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
-    $routeId = $_POST['route_id'];
+    $routeId = intval($_POST['route_id']);
 
-    if ($action === 'delete') {
-        // Ensure the route is not already inactive before deletion
-        $query = "SELECT departure_time FROM routes WHERE id = ?";
+    if ($action === 'disable') {
+        $query = "UPDATE routes SET status = 'disabled' WHERE id = ?";
         $stmt = $conn->prepare($query);
         $stmt->bind_param("i", $routeId);
-        $stmt->execute();
-        $result = $stmt->get_result()->fetch_assoc();
-
-        if ($result) {
-            $departureTime = $result['departure_time'];
-            if (strtotime($departureTime) < time()) {
-                echo json_encode(['message' => 'This route is already inactive.']);
-                exit;
-            }
-
-            // Proceed with deleting the route and associated seat availability
-            $deleteQuery = "DELETE FROM seat_availability WHERE route_id = ?";
-            $deleteStmt = $conn->prepare($deleteQuery);
-            $deleteStmt->bind_param("i", $routeId);
-            $deleteStmt->execute();
-
-            $routeDeleteQuery = "DELETE FROM routes WHERE id = ?";
-            $routeDeleteStmt = $conn->prepare($routeDeleteQuery);
-            $routeDeleteStmt->bind_param("i", $routeId);
-            $routeDeleteStmt->execute();
-
-            echo json_encode(['message' => 'Route and associated seat availability deleted successfully.']);
+        if ($stmt->execute()) {
+            echo json_encode(['message' => 'Route disabled successfully.']);
         } else {
-            echo json_encode(['message' => 'Route not found.']);
+            echo json_encode(['message' => 'Failed to disable route.']);
         }
     }
 }
-// Return the response as JSON
-echo json_encode($response);
 
 // UPDATE Route (unchanged, as per your request)
 if ($action === 'update') {

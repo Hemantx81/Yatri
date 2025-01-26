@@ -82,18 +82,59 @@ $all_buses = $result->fetch_all(MYSQLI_ASSOC);
                 source: availablePlaces
             });
 
-            // Fuzzy Search Function
-            function fuzzySearch(query, buses) {
+            // Levenshtein Distance Algorithm for Fuzzy Search
+            function levenshteinSearch(query, buses) {
+                const {
+                    source,
+                    destination
+                } = query;
+                const maxDistance = 3; // Allowable distance for fuzzy matching
+                const now = new Date();
+
                 return buses.filter(bus => {
-                    const now = new Date();
                     const departureTime = new Date(bus.raw_departure_time);
 
+                    const sourceDistance = levenshteinDistance(source.toLowerCase(), bus.source.toLowerCase());
+                    const destinationDistance = levenshteinDistance(destination.toLowerCase(), bus.destination.toLowerCase());
+
                     return (
-                        bus.source.toLowerCase().includes(query.source.toLowerCase()) &&
-                        bus.destination.toLowerCase().includes(query.destination.toLowerCase()) &&
+                        sourceDistance <= maxDistance &&
+                        destinationDistance <= maxDistance &&
                         departureTime > now
                     );
                 });
+            }
+
+            // Levenshtein Distance Calculation
+            function levenshteinDistance(a, b) {
+                const matrix = [];
+
+                // Create the matrix
+                for (let i = 0; i <= b.length; i++) {
+                    matrix[i] = [i];
+                }
+                for (let j = 0; j <= a.length; j++) {
+                    matrix[0][j] = j;
+                }
+
+                // Populate the matrix
+                for (let i = 1; i <= b.length; i++) {
+                    for (let j = 1; j <= a.length; j++) {
+                        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                            matrix[i][j] = matrix[i - 1][j - 1];
+                        } else {
+                            matrix[i][j] = Math.min(
+                                matrix[i - 1][j - 1] + 1, // Substitution
+                                Math.min(
+                                    matrix[i][j - 1] + 1, // Insertion
+                                    matrix[i - 1][j] + 1 // Deletion
+                                )
+                            );
+                        }
+                    }
+                }
+
+                return matrix[b.length][a.length];
             }
 
             // Filter Results Function
@@ -147,7 +188,7 @@ $all_buses = $result->fetch_all(MYSQLI_ASSOC);
                     return;
                 }
 
-                const searchedBuses = fuzzySearch({
+                const searchedBuses = levenshteinSearch({
                     source,
                     destination
                 }, buses);
@@ -169,7 +210,7 @@ $all_buses = $result->fetch_all(MYSQLI_ASSOC);
                     minSeats: parseInt($("#filter-seats").val()) || 0
                 };
 
-                const searchedBuses = fuzzySearch({
+                const searchedBuses = levenshteinSearch({
                     source: $("#source").val(),
                     destination: $("#destination").val()
                 }, buses);

@@ -9,19 +9,20 @@ $offset = ($page - 1) * $perPage;
 $searchTerm = isset($_GET['search']) ? '%' . $_GET['search'] . '%' : '%';
 $filterBus = isset($_GET['bus_filter']) ? $_GET['bus_filter'] : '';
 
-// Query for routes
+// Query for active routes (sorted by departure time)
 $query = "
     SELECT r.id, r.source, r.destination, r.departure_time, r.arrival_time, r.price, b.bus_name,
-           TIMESTAMPDIFF(MINUTE, r.departure_time, r.arrival_time) AS duration
+           TIMESTAMPDIFF(MINUTE, r.departure_time, r.arrival_time) AS duration, r.status
     FROM routes r
     JOIN buses b ON r.bus_id = b.id
     WHERE (r.source LIKE ? OR r.destination LIKE ? OR b.bus_name LIKE ?)
+    AND r.status = 'active'
     " . ($filterBus ? "AND b.bus_name = ?" : "") . "
+    ORDER BY r.departure_time ASC
     LIMIT ?, ?
 ";
 
 $stmt = $conn->prepare($query);
-
 if ($filterBus) {
     $stmt->bind_param("ssssii", $searchTerm, $searchTerm, $searchTerm, $filterBus, $offset, $perPage);
 } else {
@@ -136,7 +137,7 @@ $totalPages = ceil($totalRoutes / $perPage);
                             <button class="btn btn-warning btn-sm edit-btn" data-bs-toggle="modal" data-bs-target="#updateModal" data-route_id="<?= $route['id'] ?>" data-bus_name="<?= $route['bus_name'] ?>" data-source="<?= $route['source'] ?>" data-destination="<?= $route['destination'] ?>" data-departure_time="<?= $route['departure_time'] ?>" data-arrival_time="<?= $route['arrival_time'] ?>" data-price="<?= $route['price'] ?>">Edit</button>
 
                             <!-- Delete Button -->
-                            <button class="btn btn-danger btn-sm delete-btn" data-route_id="<?= $route['id'] ?>">Delete</button>
+                            <button class="btn btn-danger btn-sm delete-btn" data-route_id="<?= $route['id'] ?>">Disable</button>
                         </td>
                     </tr>
                 <?php endwhile; ?>
@@ -252,44 +253,25 @@ $totalPages = ceil($totalRoutes / $perPage);
         });
 
 
-        // Handle Delete Button Action
         document.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const routeId = e.target.getAttribute('data-route_id');
-                const row = document.getElementById('route_' + routeId);
-                const departureTime = row.getAttribute('data-departure_time');
-                const currentTime = new Date().getTime();
-
-                if (new Date(departureTime).getTime() < currentTime) {
-                    // Mark route as inactive visually
-                    row.classList.add('inactive');
-                    row.querySelector('.delete-btn').disabled = true;
-                    row.querySelector('.edit-btn').disabled = true;
-                    alert('This route is inactive because the departure time has passed.');
-                } else {
-                    if (confirm('Are you sure you want to delete this route? This will also delete associated seat availability records.')) {
-                        fetch('route_actions.php', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/x-www-form-urlencoded',
-                                },
-                                body: new URLSearchParams({
-                                    action: 'delete',
-                                    route_id: routeId,
-                                }),
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                alert(data.message);
-                                if (data.message === 'Route and associated seat availability deleted successfully.') {
-                                    row.remove();
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Error:', error);
-                                alert('Error deleting route.');
-                            });
-                    }
+                if (confirm('Are you sure you want to disable this route?')) {
+                    fetch('route_actions.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: `action=disable&route_id=${routeId}`
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            alert(data.message);
+                            if (data.message === 'Route disabled successfully.') {
+                                location.reload(); // Reload page
+                            }
+                        })
+                        .catch(error => console.error('Error:', error));
                 }
             });
         });
